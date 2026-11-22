@@ -92,9 +92,15 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 
 /* ---------- bloques ---------- */
 .block{margin-bottom:34px}
-.block-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:12px}
+.block-h{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
 h2{font-family:var(--serif);font-weight:400;font-size:21px;letter-spacing:-.01em;margin:0 0 12px}
 .block-h h2{margin:0}
+/* Títulos de apartado: dorados, con filete a la izquierda y una franja de fondo para distinguirlos */
+.block > h2,.block > .block-h{position:relative;margin:0 0 16px;padding:11px 14px 11px 16px;border-radius:12px;
+  background:linear-gradient(90deg,var(--brass-soft),rgba(200,164,100,0) 85%);border-left:3px solid var(--brass)}
+.block > h2,.block > .block-h h2{color:var(--brass-2);font-size:22px;line-height:1.2}
+.block > .block-h .link{flex:none}
+.block > h2 + .muted,.block > .block-h + .muted{margin-top:0 !important}
 h3{font-size:15px;font-weight:600;margin:0}
 .link{border:0;background:none;color:var(--brass);font-size:14px;cursor:pointer;padding:4px 0}
 .panel{background:rgba(23,23,26,.86);border:1px solid var(--line);border-radius:var(--r-lg);padding:18px}
