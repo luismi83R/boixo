@@ -240,6 +240,7 @@ details > summary::-webkit-details-marker{display:none}
 .tabla td{text-align:right;padding:6px;border-bottom:1px solid var(--line)}
 .tabla th:first-child,.tabla td:first-child{text-align:left}
 .tabla tr.hit td{color:var(--brass)}
+.tabla.fut td:nth-child(3),.tabla.fut th:nth-child(3){text-align:left;white-space:normal;min-width:150px}.tabla.fut td{vertical-align:top;white-space:nowrap}
 @media (min-width:960px){ .mes-acc{display:none!important} }
 .cfg-t{width:100%;border-collapse:collapse}
 #catsCfg .cfg-t tr td{border-bottom:0;padding-bottom:3px}
@@ -377,6 +378,7 @@ body.privado .hero-num,body.privado .hero-sub b,body.privado .stat .v,body.priva
     <section class="block"><div class="block-h"><h2 id="iMesT">Este mes</h2><button class="link" data-go="mes">Abrir el mes</button></div><div id="iMes"></div></section>
     <section class="block"><h2>Lo que necesita tu atención</h2><div id="iAvisos"></div></section>
     <section class="block"><div class="block-h"><h2>Proyectos</h2><button class="link" data-go="proyectos">Ver todos</button></div><div id="iProy"></div></section>
+    <section class="block"><div class="block-h"><h2>Gastos previstos</h2><button class="link" data-go="proyectos">Ver plan</button></div><div id="iFut"></div></section>
     <section class="block"><div class="block-h"><h2>Rumbo a la jubilación</h2><button class="link" data-go="patrimonio">Ver detalle</button></div><div id="iRumbo"></div></section>
     <section class="block"><div class="block-h"><h2>Trabajo</h2><button class="link" data-go="trabajo">Abrir</button></div><div id="iTrabajo"></div></section>
   </section>
@@ -499,6 +501,11 @@ body.privado .hero-num,body.privado .hero-sub b,body.privado .stat .v,body.priva
   <!-- ================= PROYECTOS ================= -->
   <section id="v-proyectos" class="hidden">
     <div id="proyLista">
+      <section class="block" id="futW">
+        <div class="block-h"><h2>Gastos previstos</h2></div>
+        <div class="muted" style="margin:-4px 0 14px">Pagos grandes con fecha. Te digo cuánto apartar cada mes para tenerlos listos a tiempo.</div>
+        <div id="futuros"></div>
+      </section>
       <section class="block">
         <div class="block-h"><h2>Proyectos</h2><button class="link" id="nuevoProy">Nuevo proyecto</button></div>
         <div class="seg" id="proyFiltro"><button data-f="activo" class="on">En marcha</button><button data-f="completado">Completados</button><button data-f="pausado">En pausa</button></div>
@@ -650,7 +657,7 @@ const DEFAULT_STATE = () => ({
   version: 3,
   config: {
     necesidadesPct: 0.50, ahorroMinPct: 0.20, ahorroFijo: 1000, umbral: 3000, minimoPersonal: 600,
-    deudaAviso: 0.30, deudaMax: 0.35, fondoObjetivo: 4500, saldoInicial: 0, fechaSaldo: "", presuCat: {}, resumen: "no",
+    deudaAviso: 0.30, deudaMax: 0.35, fondoObjetivo: 4500, saldoInicial: 0, fechaSaldo: "", presuCat: {}, resumen: "no", futurosOrigen: "ahorro",
     perfil: { nombre: "", edad: 42, edadJubilacion: 67, esperanzaVida: 95, ingresosDeseados: 24000, pensionEstimada: 0, rentabilidad: 0.08, inflacion: 0.025, riesgo: "Moderado", aportacionMensual: null },
     trabajo: { modo: "jornada", sueldoFijo: 0, tarifaDia: 135, horaExtra: 17, sabado: 150, plusNombre: "Gasoil", plus: 90, inicio: "08:00", finLV: "18:00", corteViernes: "12:00" },
     fijos: [
@@ -678,6 +685,7 @@ const DEFAULT_STATE = () => ({
   trabajo: { dias: [], cobros: {} },
   cartera: { activos: [nuevoActivo("plan", "Plan de pensiones"), nuevoActivo("robo", "Roboadvisor"), nuevoActivo("vang", "Fondo Vanguard"), nuevoActivo("resto", "Trade Republic / cuenta ahorro", "Liquidez")] },
   proyectos: [],
+  futuros: [],
   deudas: [],
   bienes: [],
   ia: { chat: [] },
@@ -712,6 +720,7 @@ function migrar(s) {
   delete s.config.ahorroInicial; delete s.config.invInicial;
   s.cartera.activos = s.cartera.activos.map((a) => Object.assign(nuevoActivo(a.id, a.nombre, a.clase), a, { inicio: a.inicio || { fecha: "", aportado: 0 } }));
   s.proyectos = s.proyectos || [];
+  s.futuros = s.futuros || [];
   s.ia = s.ia || { chat: [] };
   s.historico = s.historico || {};
   s.deudas = s.deudas || [];
@@ -737,6 +746,7 @@ function foto() {
   return { cuenta, fondo: c.liquidez, inversiones: c.invValor, aportado: c.invAportado, metas, bienes, deudas: deuda, bruto, total: r2(bruto - deuda), activos };
 }
 function save() {
+  _planFut = null;
   try { S.historico = S.historico || {}; S.historico[hoy().slice(0, 7)] = foto(); } catch (e) {}
   try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { if (!SYNC.on) toast("No se pudo guardar en este navegador"); }
   if (SYNC.on) { SYNC.dirty = true; guardarMeta(); programarSubida(); }
@@ -787,45 +797,57 @@ const icon = (id, cls = "i") => `<svg class="${cls}"><use href="#ic-${id}"/></sv
 const fechaMovEnMes = (m) => hoy().slice(0, 7) === m ? hoy() : (m < hoy().slice(0, 7) ? m + "-28" : m + "-01");
 
 /* ---------- 4. REGLAS DEL MES ---------- */
-function calcularReparto(base, c = S.config) {
-  if (!base || base <= 0) return { base: 0, necesidades: 0, personal: 0, ahorro: 0, inversion: 0, ahorroTotal: 0, items: [] };
+function calcularReparto(base, c = S.config, fut = 0) {
+  if (!base || base <= 0) return { base: 0, necesidades: 0, personal: 0, ahorro: 0, inversion: 0, ahorroTotal: 0, items: [], futuro: 0, futuroFalta: r2(fut || 0), futuroDeAhorro: 0, futuroDePersonal: 0 };
   const nec = r2(base * c.necesidadesPct);
-  let ahorroTotal = base >= c.umbral ? c.ahorroFijo : Math.max(base * c.ahorroMinPct, Math.min(c.ahorroFijo, base - nec - c.minimoPersonal));
-  ahorroTotal = r2(Math.max(0, Math.min(ahorroTotal, base - nec)));
-  const personal = r2(base - nec - ahorroTotal);
+  let A = base >= c.umbral ? c.ahorroFijo : Math.max(base * c.ahorroMinPct, Math.min(c.ahorroFijo, base - nec - c.minimoPersonal));
+  A = r2(Math.max(0, Math.min(A, base - nec)));
+  const libre = r2(base - nec - A);
+  // Gastos previstos: salen del ahorro o del dinero personal, según la preferencia
+  let deAhorro = 0, dePersonal = 0;
+  if (fut > 0) {
+    if ((c.futurosOrigen || "ahorro") === "ahorro") { deAhorro = Math.min(fut, A); dePersonal = Math.max(0, Math.min(libre, fut - deAhorro)); }
+    else { dePersonal = Math.max(0, Math.min(libre, fut)); deAhorro = Math.min(A, fut - dePersonal); }
+  }
+  deAhorro = r2(deAhorro); dePersonal = r2(dePersonal);
+  const futuro = r2(deAhorro + dePersonal), pool = r2(A - deAhorro);
+  const ahorroTotal = r2(A + dePersonal), personal = r2(libre - dePersonal);
   const fijos = c.repartoAhorro.filter((x) => !x.resto);
   const sumaFijos = fijos.reduce((a, x) => a + x.importe, 0);
-  const factor = ahorroTotal >= sumaFijos ? 1 : (sumaFijos ? ahorroTotal / sumaFijos : 0);
-  const items = fijos.map((x) => ({ ...x, importe: r2(x.importe * factor) }));
+  const factor = pool >= sumaFijos ? 1 : (sumaFijos ? pool / sumaFijos : 0);
+  const items = futuro > 0 ? [{ id: "futuros", nombre: "Apartar para gastos previstos", importe: futuro, tipo: "ahorro", futuro: true }] : [];
+  items.push(...fijos.map((x) => ({ ...x, importe: r2(x.importe * factor) })));
   const resto = c.repartoAhorro.find((x) => x.resto);
-  const restoImp = r2(ahorroTotal - items.reduce((a, x) => a + x.importe, 0));
+  const restoImp = r2(pool - items.filter((x) => !x.futuro).reduce((a, x) => a + x.importe, 0));
   if (resto && restoImp > 0) items.push({ ...resto, importe: restoImp });
   const inversion = r2(items.filter((x) => x.tipo === "inversion").reduce((a, x) => a + x.importe, 0));
-  return { base, necesidades: nec, personal, ahorro: r2(ahorroTotal - inversion), inversion, ahorroTotal, items };
+  return { base, necesidades: nec, personal, ahorro: r2(ahorroTotal - inversion), inversion, ahorroTotal, items, futuro, futuroFalta: r2(Math.max(0, fut - futuro)), futuroDeAhorro: deAhorro, futuroDePersonal: dePersonal };
 }
-const SIGNO = { nomina: 1, ingreso: 1, gasto: -1, ahorro: -1, inversion: -1, retirada: 1, traspaso: 0 };
-const TIPO_TXT = { nomina: "Nómina", ingreso: "Ingreso", gasto: "Gasto", ahorro: "A ahorro", inversion: "Inversión", retirada: "Sacado de ahorro", traspaso: "Traspaso" };
+const SIGNO = { nomina: 1, ingreso: 1, gasto: -1, ahorro: -1, inversion: -1, retirada: 1, traspaso: 0, uso: 1 };
+const TIPO_TXT = { nomina: "Nómina", ingreso: "Ingreso", gasto: "Gasto", ahorro: "A ahorro", inversion: "Inversión", retirada: "Sacado de ahorro", traspaso: "Traspaso", uso: "Usado de lo apartado" };
 const movsMes = (m) => S.movimientos.filter((x) => x.fecha.slice(0, 7) === m);
 
 function resumenMes(m) {
   const mv = movsMes(m);
   const sum = (f) => r2(mv.filter(f).reduce((a, x) => a + x.importe, 0));
   const base = sum((x) => x.tipo === "nomina");
-  const rep = calcularReparto(base);
+  const rep = calcularReparto(base, S.config, futMes(m));
   const otrosIngresos = sum((x) => x.tipo === "ingreso" && x.cat !== "proyecto");
   const ingresosProy = sum((x) => x.tipo === "ingreso" && x.cat === "proyecto");
   const gastoNec = sum((x) => x.tipo === "gasto" && x.cat === "necesidades");
   const gastoProy = sum((x) => x.tipo === "gasto" && x.cat === "proyecto");
-  const gastoPer = sum((x) => x.tipo === "gasto" && x.cat !== "necesidades" && x.cat !== "proyecto");
+  const gastoPrev = sum((x) => x.tipo === "gasto" && x.cat === "previsto");
+  const gastoPer = sum((x) => x.tipo === "gasto" && x.cat !== "necesidades" && x.cat !== "proyecto" && x.cat !== "previsto");
+  const usos = sum((x) => x.tipo === "uso");
   const ahorro = sum((x) => x.tipo === "ahorro"), inversion = sum((x) => x.tipo === "inversion"), retiradas = sum((x) => x.tipo === "retirada");
   const ingresos = r2(base + otrosIngresos + ingresosProy);
-  const gastos = r2(gastoNec + gastoPer + gastoProy);
-  const saldoMes = r2(ingresos - gastos - ahorro - inversion + retiradas);
+  const gastos = r2(gastoNec + gastoPer + gastoProy + gastoPrev);
+  const saldoMes = r2(ingresos - gastos - ahorro - inversion + retiradas + usos);
   const deudas = r2(S.config.fijos.filter((f) => f.deuda).reduce((a, f) => a + f.importe, 0));
   const info = S.meses[m] || {};
   const pendientes = (info.pendientes || []).filter((p) => !p.hecho);
   const pendienteTotal = r2(pendientes.reduce((a, p) => a + p.importe, 0));
-  return { mes: m, base, rep, otrosIngresos, ingresosProy, ingresos, gastoNec, gastoPer, gastoProy, gastos, ahorro, inversion, retiradas, saldoMes,
+  return { mes: m, base, rep, otrosIngresos, ingresosProy, ingresos, gastoNec, gastoPer, gastoProy, gastoPrev, usos, gastos, ahorro, inversion, retiradas, saldoMes,
     ahorroNeto: r2(ahorro + inversion - retiradas), deudas, ratioDeuda: base ? deudas / base : 0, presupuestoPersonal: r2(rep.personal + otrosIngresos),
     pendientes, pendienteTotal, cerrado: !!info.cerrado, nMovs: mv.length };
 }
@@ -840,7 +862,11 @@ function rehacerMes(m) {
   const nuevos = [];
   if (base > 0) {
     for (const f of S.config.fijos) { const key = "fijo:" + f.id; if (!hechosKeys.has(key)) nuevos.push({ id: uid(), key, concepto: f.nombre, importe: f.importe, tipo: "gasto", cat: f.cat, hecho: false }); }
-    for (const it of calcularReparto(base).items) { const key = "aho:" + it.id; if (!hechosKeys.has(key)) nuevos.push({ id: uid(), key, concepto: it.nombre, importe: it.importe, tipo: it.tipo, cat: it.tipo, activoId: it.id, hecho: false }); }
+    info.futuro = futMes(m);
+    const manual = apartadoFutMes(m, true);
+    for (const it of calcularReparto(base, S.config, info.futuro).items) {
+      const key = "aho:" + it.id;
+      if (it.futuro) { const imp = r2(it.importe - manual); if (!hechosKeys.has(key) && imp > 0) nuevos.push({ id: uid(), key, concepto: it.nombre, importe: imp, tipo: "ahorro", cat: "futuro", hecho: false }); continue; } if (!hechosKeys.has(key)) nuevos.push({ id: uid(), key, concepto: it.nombre, importe: it.importe, tipo: it.tipo, cat: it.tipo, activoId: it.id, hecho: false }); }
   }
   info.pendientes = [...hechos, ...nuevos];
 }
@@ -1093,7 +1119,7 @@ function calcProyecto(p) {
     progreso: p.objetivo ? Math.max(0, Math.min(1, beneficio / p.objetivo)) : (invertido ? Math.min(1, ingresos / invertido) : 0), principal: beneficio };
 }
 const proyecto = (id) => S.proyectos.find((p) => p.id === id);
-const totalMetas = () => r2(S.proyectos.filter((p) => p.tipo === "meta" && p.estado !== "completado").reduce((s, p) => s + calcProyecto(p).ahorrado, 0));
+const totalMetas = () => r2(S.proyectos.filter((p) => p.tipo === "meta" && p.estado !== "completado").reduce((s, p) => s + calcProyecto(p).ahorrado, 0) + Math.max(0, huchaFuturos()));
 
 /* ---------- 8. ACCIONES ---------- */
 function registrarIngreso(fecha, concepto, importe, silencioso) {
@@ -1117,7 +1143,7 @@ function marcarPendiente(m, id, importe) {
   const p = info.pendientes.find((x) => x.id === id); if (!p) return;
   if (!p.hecho) {
     p.importe = importe; p.hecho = true;
-    const mov = { id: uid(), fecha: fechaMovEnMes(m), concepto: p.concepto, importe, tipo: p.tipo, cat: p.tipo === "gasto" ? p.cat : p.tipo, pendiente: p.id };
+    const mov = { id: uid(), fecha: fechaMovEnMes(m), concepto: p.concepto, importe, tipo: p.tipo, cat: p.tipo === "gasto" || p.cat === "futuro" ? p.cat : p.tipo, pendiente: p.id };
     if (p.activoId) mov.activoId = p.activoId;
     S.movimientos.push(mov); p.movId = mov.id;
   } else { S.movimientos = S.movimientos.filter((x) => x.id !== p.movId); p.hecho = false; delete p.movId; }
@@ -1131,6 +1157,7 @@ function quitarMovimiento(id) {
   for (const k in S.trabajo.cobros) { const c = S.trabajo.cobros[k]; if (c.movId === id) delete c.movId; if (c.plusMovId === id) delete c.plusMovId; }
   for (const pr of S.proyectos) pr.apuntes = (pr.apuntes || []).filter((x) => x.movId !== id);
   for (const a of S.cartera.activos) a.operaciones = (a.operaciones || []).filter((o) => o.movId !== id);
+  for (const f of S.futuros || []) if (f.pagado && (f.pagado.movIds || []).includes(id)) { S.movimientos = S.movimientos.filter((x) => !f.pagado.movIds.includes(x.id)); f.pagado = null; }
   if (mv.tipo === "nomina") rehacerMes(m);
 }
 function borrarMovimiento(id) {
@@ -1154,7 +1181,7 @@ function cerrarMes(m) {
     if (!confirm("Te faltan " + eur(-sobra) + ". Se apuntará como dinero sacado del fondo de emergencia. ¿Continuar?")) return;
     S.movimientos.push({ id: uid(), fecha, concepto: "Déficit de " + mesLabel(m), importe: -sobra, tipo: "retirada", cat: "retirada", activoId: "resto" });
   }
-  (S.meses[m] || (S.meses[m] = { pendientes: [] })).cerrado = true;
+  const infoC = S.meses[m] || (S.meses[m] = { pendientes: [] }); infoC.futuro = futMes(m); infoC.cerrado = true;
   save(); render(); toast("Mes cerrado");
 }
 
@@ -1184,7 +1211,7 @@ function avisos(m) {
   const viejas = cart.items.filter((x) => x.aportado > 0 && x.a.clase !== "Liquidez" && x.a.modo !== "cotiza" && (!x.last || (Date.now() - fechaDate(x.last.fecha)) / 864e5 > 40));
   if (viejas.length) out.push({ n: "info", t: "Actualiza el valor de " + viejas.map((x) => x.a.nombre).join(", ") + ".", go: "patrimonio" });
   if (cart.liquidez < c.fondoObjetivo) out.push({ n: "info", t: "Fondo de emergencia al " + pct(Math.max(0, cart.liquidez) / c.fondoObjetivo, 0) + ": faltan " + eur(c.fondoObjetivo - cart.liquidez) + ".", go: "patrimonio" });
-  out.push(...avisosCategorias(m), ...avisosFiscales());
+  out.push(...avisosFuturos(), ...avisosCategorias(m), ...avisosFiscales());
   const orden = { crit: 0, warn: 1, info: 2, good: 3 };
   return out.sort((a, b) => orden[a.n] - orden[b.n]);
 }
@@ -1281,7 +1308,7 @@ function ritmoGasto(m) {
   const [y, mo] = m.split("-").map(Number), D = new Date(y, mo, 0).getDate();
   const r = resumenMes(m), presu = r2(r.rep.necesidades + r.presupuestoPersonal);
   const fijos = r2(S.config.fijos.reduce((s, f) => s + f.importe, 0));
-  const gastos = movsMes(m).filter((x) => x.tipo === "gasto" && x.cat !== "proyecto");
+  const gastos = movsMes(m).filter((x) => x.tipo === "gasto" && x.cat !== "proyecto" && x.cat !== "previsto");
   const hoyD = m === hoy().slice(0, 7) ? Number(hoy().slice(8, 10)) : m < hoy().slice(0, 7) ? D : 0;
   const real = [], ideal = [];
   let acc = 0;
@@ -1371,6 +1398,7 @@ function meter(nombre, real, pres, color, opts = {}) {
 function saludo() { const h = new Date().getHours(); return h < 6 ? "Buenas noches" : h < 14 ? "Buenos días" : h < 21 ? "Buenas tardes" : "Buenas noches"; }
 
 function render() {
+  _planFut = null;
   const nombre = (S.config.perfil.nombre || "").trim();
   $("#hello").textContent = saludo() + (nombre ? ", " + nombre : "");
   $$(".mesLbl").forEach((e) => e.textContent = mesLabel(ui.mes));
@@ -1418,6 +1446,7 @@ function renderInicio() {
   $("#iAvisos").innerHTML = av.length ? av.slice(0, 5).map((a) => `<div class="note ${a.n} ${a.go || a.proy ? "click" : ""}" ${a.go ? `data-go="${a.go}"` : ""} ${a.proy ? `data-proy="${a.proy}"` : ""} style="cursor:${a.go || a.proy ? "pointer" : "default"}"><span class="ico">${ICO[a.n]}</span><span>${esc(a.t)}</span></div>`).join("")
     : `<div class="note good"><span class="ico">✓</span><span>Todo en orden.</span></div>`;
 
+  renderFuturosInicio();
   const act = S.proyectos.filter((p) => p.estado === "activo").slice(0, 3);
   $("#iProy").innerHTML = act.length ? act.map(proyItem).join("") : `<div class="sub">Crea tu primer proyecto: una meta de ahorro, una reforma o un negocio.</div><button class="btn sm" id="iNuevoProy" style="margin-top:12px">Nuevo proyecto</button>`;
 
@@ -1430,6 +1459,7 @@ function renderInicio() {
 
 /* --- Mes --- */
 function renderMes() {
+  if (ui.mes === hoy().slice(0, 7) && sincronizarFuturosMes()) save();
   const r = resumenMes(ui.mes);
   renderReparto(r); renderMeters(r); renderPendientes(); renderMovs(); renderHist(); renderRitmo(); renderPlanAhorro(); renderCategorias();
   const sobra = r2(r.saldoMes - r.pendienteTotal), cart = calcCartera();
@@ -1453,6 +1483,7 @@ function renderMeters(r) {
   if (!r.base && !r.nMovs) { el.innerHTML = `<div class="sub">Sin datos este mes.</div>`; return; }
   el.innerHTML = meter("Necesidades", r.gastoNec, r.rep.necesidades, col("--c1"), { gasto: true }) + meter("Personal", r.gastoPer, r.presupuestoPersonal, col("--c2"), { gasto: true })
     + meter("Ahorro", r2(r.ahorro - r.retiradas), r.rep.ahorro, col("--c3")) + meter("Inversión", r.inversion, r.rep.inversion, col("--c4"))
+    + (r.gastoPrev ? `<div class="muted" style="margin-top:6px">Gastos previstos pagados este mes: ${eur(r.gastoPrev)}, con lo que tenías apartado. No cuentan en tu presupuesto.</div>` : "")
     + (r.gastoProy || r.ingresosProy ? `<div class="muted" style="margin-top:6px">Proyectos este mes: ${eur(r.gastoProy)} gastados${r.ingresosProy ? ", " + eur(r.ingresosProy) + " ingresados" : ""}.</div>` : "");
 }
 function renderPendientes() {
@@ -1469,6 +1500,8 @@ function renderPendientes() {
 }
 function etiquetaMov(x) {
   if (x.proyectoId && proyecto(x.proyectoId)) return proyecto(x.proyectoId).nombre;
+  if (x.futuroId && futuro(x.futuroId)) return futuro(x.futuroId).nombre;
+  if (x.cat === "futuro") return "Gastos previstos";
   if (x.tipo === "gasto") return categoria(catDe(x)).n;
   if (x.activoId && activo(x.activoId)) return activo(x.activoId).nombre;
   return "";
@@ -1796,7 +1829,8 @@ function hojaDesglose(k) {
   } else if (k === "metas") {
     tit = "Metas de ahorro";
     const ms = S.proyectos.filter((p) => p.tipo === "meta" && p.estado !== "completado");
-    h = ms.length ? `<ul class="rows">${ms.map((p) => fila(esc(p.nombre), eur(calcProyecto(p).ahorrado), "de " + eur0(p.objetivo))).join("")}</ul>` : `<div class="sub">No tienes metas de ahorro en marcha. Créalas en Proyectos.</div>`;
+    const hu = Math.max(0, huchaFuturos());
+    h = ms.length || hu ? `<ul class="rows">${ms.map((p) => fila(esc(p.nombre), eur(calcProyecto(p).ahorrado), "de " + eur0(p.objetivo))).join("")}${hu ? fila("Apartado para gastos previstos", eur(hu), "Renta, reformas y otros pagos con fecha") : ""}</ul>` : `<div class="sub">No tienes metas de ahorro en marcha. Créalas en Proyectos.</div>`;
   } else if (k === "inversiones") {
     tit = "Inversiones";
     h = `<ul class="rows">${c.inv.map((x) => fila(esc(x.a.nombre), eur(x.valor), "Aportado " + eur0(x.aportado) + " · " + sEur(x.ganancia))).join("")}</ul>`;
@@ -1845,6 +1879,7 @@ function renderProyectos() {
   $("#proyLista").classList.toggle("hidden", !!ui.proyId); $("#proyDet").classList.toggle("hidden", !ui.proyId);
   if (ui.proyId && proyecto(ui.proyId)) return renderProyecto(proyecto(ui.proyId));
   ui.proyId = null;
+  renderFuturos();
   $$("#proyFiltro button").forEach((b) => b.classList.toggle("on", b.dataset.f === ui.proyFiltro));
   const lista = S.proyectos.filter((p) => p.estado === ui.proyFiltro);
   $("#proyItems").innerHTML = lista.length ? lista.map(proyItem).join("")
@@ -1945,7 +1980,7 @@ function hojaApunte(p, tipo) {
 }
 
 /* --- Asesor --- */
-const CHIPS = ["¿Cómo voy este mes?", "¿Me puedo permitir gastar 1.500 €?", "¿Cómo voy para la jubilación?", "¿Qué proyecto priorizo?", "¿Cómo equilibro mi cartera?", "¿Dónde puedo recortar gastos?"];
+const CHIPS = ["¿Cómo voy este mes?", "¿Llego a mis gastos previstos?", "¿Me puedo permitir gastar 1.500 €?", "¿Cómo voy para la jubilación?", "¿Qué proyecto priorizo?", "¿Cómo equilibro mi cartera?", "¿Dónde puedo recortar gastos?"];
 function renderAsesor() {
   $("#aiChips").innerHTML = CHIPS.map((c) => `<button data-chip="${esc(c)}">${esc(c)}</button>`).join("");
   const chat = S.ia.chat || [];
@@ -2101,10 +2136,16 @@ $("#quick").addEventListener("submit", (e) => {
 });
 
 document.addEventListener("click", (e) => {
-  const t = e.target.closest("[data-cat],[data-editmov],[data-caldia],[data-catdel],#btnPriv,#btnImportar,#addCat,[data-desglose],[data-deuda],[data-bien],[data-tj],[data-mgasto],#heroNum,[data-go],[data-q],[data-mes],[data-pend],[data-del],[data-delfijo],[data-deldia],[data-editdia],[data-valok],[data-delact],[data-undoval],[data-op],[data-delop],[data-precio],[data-proy],[data-back],[data-apunte],[data-tarea],[data-deltarea],[data-delapunte],[data-estado],[data-editproy],[data-delproy],[data-chip],#iNuevoProy");
+  const t = e.target.closest("[data-cat],[data-editmov],[data-caldia],[data-catdel],#btnPriv,#btnImportar,#addCat,[data-desglose],[data-deuda],[data-bien],[data-tj],[data-mgasto],#heroNum,[data-go],[data-q],[data-mes],[data-pend],[data-del],[data-delfijo],[data-deldia],[data-editdia],[data-valok],[data-delact],[data-undoval],[data-op],[data-delop],[data-precio],[data-proy],[data-back],[data-apunte],[data-tarea],[data-deltarea],[data-delapunte],[data-estado],[data-editproy],[data-delproy],[data-chip],#iNuevoProy,[data-fut],[data-futpagar],[data-futorig],#nuevoFut,#iNuevoFut,#futApartar,#futDevolver");
   if (!t) return;
   const d = t.dataset;
   if (t.id === "iNuevoProy") return hojaProyecto(null);
+  if (t.id === "nuevoFut" || t.id === "iNuevoFut") return hojaFuturo(null);
+  if (t.id === "futApartar") return hojaApartar();
+  if (t.id === "futDevolver") return devolverSobrante();
+  if (d.futpagar) { e.stopPropagation(); return hojaPagarFuturo(futuro(d.futpagar)); }
+  if (d.fut) return hojaFuturo(futuro(d.fut));
+  if (d.futorig) { S.config.futurosOrigen = d.futorig; sincronizarFuturosMes(); save(); render(); return toast(d.futorig === "ahorro" ? "Saldrá de tu ahorro mensual" : "Saldrá de tu dinero personal"); }
   if (t.id === "heroNum") return hojaDesglose("total");
   if (t.id === "btnPriv") return togglePrivado();
   if (t.id === "btnImportar") return hojaImportar();
@@ -2273,6 +2314,7 @@ function construirTablas() {
   T["Trabajo jornadas"] = [["Fecha", "Día", "Tipo", "Entrada", "Salida", "Horas extra", "Importe", "Nota"]].concat([...S.trabajo.dias].sort((a, b) => a.fecha.localeCompare(b.fecha)).map((d) => { const c = calcDia(d); return [d.fecha, DIAS[diaSemana(d.fecha)], TIPOS_DIA[d.tipo].lbl, d.inicio || "", d.fin || "", c.extras, c.total, d.nota || ""]; }));
   T["Trabajo cobros"] = [["Mes trabajado", "Esperado", "Transferencia", "Efectivo", S.config.trabajo.plusNombre + " aparte", "Cobrado", "Diferencia"]].concat(mesesTrabajo().map((m) => { const g = resumenTrabajo(m), cb = g.cobro || {}; return [m, g.esperado, cb.transferencia || 0, cb.efectivo || 0, cb.plus || 0, g.cobrado == null ? "" : g.cobrado, g.diferencia == null ? "" : g.diferencia]; }));
   T["Patrimonio"] = [["Activo", "Tipo", "Ticker", "Títulos", "Aportado", "Valor", "Ganancia", "Ganancia %", "Rentabilidad anual %", "Peso objetivo %"]].concat(calcCartera().items.map((x) => [x.a.nombre, x.a.clase, x.a.ticker || "", x.titulos || "", x.aportado, x.valor, x.ganancia, r2(x.pct * 100), x.tir == null ? "" : r2(x.tir * 100), r2((x.a.objetivo || 0) * 100)]));
+  { const P = planFuturos(); T["Gastos previstos"] = [["Gasto", "Importe", "Para", "Momento", "Apartado", "Falta", "Estado"]].concat(P.pend.map((f, i) => [f.nombre, f.importe, f.mes, f.cuando === "final" ? "Final de mes" : "Principios de mes", P.asig[i], r2(f.importe - P.asig[i]), "Pendiente"]), (S.futuros || []).filter((f) => f.pagado).map((f) => [f.nombre, f.importe, f.mes, f.cuando === "final" ? "Final de mes" : "Principios de mes", f.pagado.importe, 0, "Pagado el " + f.pagado.fecha]), [[], ["Plan mes a mes"], ["Mes", "Apartar", "Para qué", "En la hucha"]], P.filas.map((x) => [x.m, x.total, x.partes.map((p) => p.f.nombre + " " + p.a).join(" · "), x.saldo])); }
   T["Proyectos"] = [["Proyecto", "Tipo", "Estado", "Objetivo", "Fecha", "Ahorrado / gastado / beneficio", "Progreso %", "Tareas hechas", "Tareas totales"]].concat(S.proyectos.map((p) => { const k = calcProyecto(p); return [p.nombre, TIPOS_PROY[p.tipo], p.estado, p.objetivo, p.fecha || "", k.principal, r2(k.progreso * 100), k.hechas, k.tareas]; }));
   return T;
 }
@@ -2327,6 +2369,10 @@ function datosParaIA() {
     patrimonio: { neto: foto().total, deudas: totalDeudas(), total: r2(saldoCuenta() + c.valor + totalMetas()), fondoEmergencia: c.liquidez, inversiones: c.invValor, aportado: c.invAportado, ganancia: c.invGanancia, rentabilidadAnualPct: c.tir == null ? null : r2(c.tir * 100),
       activos: c.items.map((x) => ({ nombre: x.a.nombre, tipo: x.a.clase, ticker: x.a.ticker || undefined, titulos: x.titulos || undefined, valor: x.valor, aportado: x.aportado, ganancia: x.ganancia, rentabilidadAnualPct: x.tir == null ? null : r2(x.tir * 100), pesoObjetivoPct: r2((x.a.objetivo || 0) * 100) })) },
     jubilacion: { inversionMensualActual: pj.aport, capitalInvertido: pj.capital, escenarios: pj.escenarios.map((e) => ({ escenario: e.n, rentabilidadPct: r2(e.r * 100), necesario: e.necesario, proyectado: e.proyectado, coberturaPct: r2(e.cobertura * 100), inversionMensualNecesaria: e.cuota })) },
+    gastosPrevistos: (() => { const P = planFuturos(); return { cuotaMensual: P.cuota, apartadoTotal: P.hucha, apartadoEsteMes: P.esteMes, faltaEsteMes: P.faltaEsteMes, aportarHasta: P.hasta, saleDe: S.config.futurosOrigen === "personal" ? "dinero personal" : "ahorro mensual",
+      pendientes: P.pend.map((f, i) => ({ nombre: f.nombre, importe: f.importe, paraMes: f.mes, momento: f.cuando === "final" ? "final de mes" : "principios de mes", asignado: P.asig[i], mesesParaApartar: P.meses[i] })),
+      planMesAMes: P.filas.map((x) => ({ mes: x.m, apartar: x.total, reparto: x.partes.map((p) => p.f.nombre + ": " + p.a), pagos: x.pagos.map((f) => f.nombre) })),
+      pagados: (S.futuros || []).filter((f) => f.pagado).map((f) => ({ nombre: f.nombre, previsto: f.importe, pagado: f.pagado.importe, fecha: f.pagado.fecha })) }; })(),
     proyectos: S.proyectos.map((p) => { const k = calcProyecto(p); return { nombre: p.nombre, tipo: TIPOS_PROY[p.tipo], estado: p.estado, objetivo: p.objetivo, fechaLimite: p.fecha || null, notas: p.notas || undefined, ...(p.tipo === "meta" ? { ahorrado: k.ahorrado, cuotaMensualNecesaria: k.cuota, ritmoMensual: k.ritmo, enPlazo: k.enPlazo } : p.tipo === "presupuesto" ? { gastado: k.gastado, restante: k.restante } : { invertido: k.invertido, ingresos: k.ingresos, beneficio: k.beneficio, rentabilidadPct: r2(k.roi * 100) }), tareasPendientes: (p.tareas || []).filter((t) => !t.hecha).map((t) => t.texto + (t.fecha ? " (" + t.fecha + ")" : "")) }; }),
     trabajo: { modo: S.config.trabajo.modo, mesActualEsperado: resumenTrabajo(m).esperado, pagadoDeMenos: bt.total, pagadoDeMas: bt.deMas, balance: bt.neto, mesesConDiferencia: bt.meses },
     avisos: avisos(m).map((a) => a.t),
@@ -2358,6 +2404,7 @@ function analisisLocal() {
   L.push("Fondo de emergencia: " + eur(c.liquidez) + " de " + eur(cfg.fondoObjetivo) + ".");
   L.push("Jubilación (escenario moderado): cubrirías el " + pct(pj.escenarios[1].cobertura, 0) + " del objetivo.");
   for (const p of S.proyectos.filter((p) => p.estado === "activo")) { const k = calcProyecto(p); if (p.tipo === "meta") L.push(p.nombre + ": " + eur0(k.ahorrado) + " de " + eur0(p.objetivo) + (k.cuota ? ", necesitas " + eur0(k.cuota) + "/mes" : "") + "."); }
+  { const P = planFuturos(); if (P.pend.length) L.push("Gastos previstos: aparta " + eur0(P.cuota) + " al mes" + (P.hasta ? " hasta " + mesLabel(P.hasta) : "") + ". Llevas " + eur0(P.hucha) + " de " + eur0(P.necesario) + (P.faltaEsteMes > 0 ? "; este mes te faltan " + eur0(P.faltaEsteMes) : "; este mes vas al día") + "."); }
   if (bt.total > 0) L.push("Trabajo: balance de cobros " + sEur(bt.neto) + ".");
   L.push("\nQué haría:");
   const acc = [];
@@ -2366,6 +2413,7 @@ function analisisLocal() {
   if (r.base && r.ahorroNeto < r.rep.ahorroTotal) acc.push("Haz las transferencias de ahorro nada más cobrar.");
   if (c.liquidez < cfg.fondoObjetivo) acc.push("Sigue llenando el fondo de emergencia: faltan " + eur(cfg.fondoObjetivo - c.liquidez) + ".");
   if (pj.escenarios[1].cobertura < 1) acc.push("Para tu jubilación, sube la inversión mensual hacia " + eur0(pj.escenarios[1].cuota) + " cuando puedas.");
+  { const P = planFuturos(); if (P.faltaEsteMes > 0) acc.push("Aparta " + eur0(P.faltaEsteMes) + " para tus gastos previstos (" + P.pend.slice(0, 2).map((f) => f.nombre).join(", ") + ")."); }
   if (!acc.length) acc.push("Vas según el plan. Mantén el ahorro automático.");
   acc.slice(0, 4).forEach((a, i) => L.push((i + 1) + ". " + a));
   return L.join("\n");
@@ -2520,7 +2568,7 @@ function clasificar(concepto) {
 const catDe = (mv) => mv.categoria || clasificar(mv.concepto);
 function gastoPorCategoria(m) {
   const out = {};
-  for (const x of movsMes(m)) if (x.tipo === "gasto" && x.cat !== "proyecto") { const c = catDe(x); out[c] = r2((out[c] || 0) + x.importe); }
+  for (const x of movsMes(m)) if (x.tipo === "gasto" && x.cat !== "proyecto" && x.cat !== "previsto") { const c = catDe(x); out[c] = r2((out[c] || 0) + x.importe); }
   return out;
 }
 function mediaCategorias(m, n = 3) {
@@ -2581,7 +2629,7 @@ function renderCategorias() {
     + `<div class="muted" style="margin-top:8px">Toca una categoría para ver sus gastos. Los límites por categoría se ponen en Ajustes.</div>`;
 }
 function hojaCategoria(c) {
-  const cat = categoria(c), mv = movsMes(ui.mes).filter((x) => x.tipo === "gasto" && x.cat !== "proyecto" && catDe(x) === c).sort((a, b) => b.fecha.localeCompare(a.fecha));
+  const cat = categoria(c), mv = movsMes(ui.mes).filter((x) => x.tipo === "gasto" && x.cat !== "proyecto" && x.cat !== "previsto" && catDe(x) === c).sort((a, b) => b.fecha.localeCompare(a.fecha));
   abrirHoja(`<h2>${esc(cat.n)} en ${mesNombre(ui.mes)}</h2><ul class="rows">${mv.map((x) => `<li class="rowi click" data-editmov="${x.id}"><div class="t"><b>${esc(x.concepto)}</b><span>${fechaCorta(x.fecha)}</span></div><span class="a">${eur(x.importe)}</span></li>`).join("")}</ul>
     <div class="muted" style="margin-top:10px">Toca un gasto para cambiarle la categoría.</div>`);
 }
@@ -2594,7 +2642,7 @@ function hojaEditarMov(id) {
   abrirHoja(`<h2>Editar movimiento</h2>
     <div class="field"><label>Concepto</label><input id="eCon" value="${esc(x.concepto)}"></div>
     <div class="row"><div><label>Fecha</label><input type="date" id="eFecha" value="${x.fecha}"></div><div><label>Importe (€)</label><input id="eImp" inputmode="decimal" value="${numTxt(x.importe)}"></div></div>
-    ${x.tipo === "gasto" && x.cat !== "proyecto" ? `<div class="field"><label>Categoría</label><select id="eCat">${optsCategorias(catDe(x))}</select></div>` : `<div class="muted" style="margin-bottom:12px">${TIPO_TXT[x.tipo]}${etiquetaMov(x) ? " · " + esc(etiquetaMov(x)) : ""}</div>`}
+    ${x.tipo === "gasto" && x.cat !== "proyecto" && x.cat !== "previsto" ? `<div class="field"><label>Categoría</label><select id="eCat">${optsCategorias(catDe(x))}</select></div>` : `<div class="muted" style="margin-bottom:12px">${TIPO_TXT[x.tipo]}${etiquetaMov(x) ? " · " + esc(etiquetaMov(x)) : ""}</div>`}
     <div class="btns"><button class="btn gold" id="eOk" style="flex:1">Guardar</button><button class="btn danger" id="eDel">Borrar</button></div>`, () => {
     $("#eOk").onclick = () => {
       const imp = optNum($("#eImp").value); if (!(imp > 0)) return toast("Importe no válido");
@@ -2762,7 +2810,7 @@ function aplicarImportacion() {
     const info = S.meses[m];
     if (info && (x.tipo === "gasto" || x.tipo === "ahorro" || x.tipo === "inversion")) {
       const p = info.pendientes.find((p) => !p.hecho && p.tipo === x.tipo && Math.abs(p.importe - x.importe) <= Math.max(1, p.importe * 0.05) && (norm(p.concepto).split(" ").some((w) => w.length >= 4 && norm(x.concepto).includes(" " + w)) || (x.tipo === "gasto" && clasificar(p.concepto) === x.categoria) || x.tipo !== "gasto"));
-      if (p) { p.hecho = true; p.movId = mv.id; p.importe = x.importe; mv.pendiente = p.id; if (p.activoId) mv.activoId = p.activoId; if (x.tipo === "gasto") mv.cat = p.cat; enlazados++; }
+      if (p) { p.hecho = true; p.movId = mv.id; p.importe = x.importe; mv.pendiente = p.id; if (p.activoId) mv.activoId = p.activoId; if (x.tipo === "gasto" || p.cat === "futuro") mv.cat = p.cat; enlazados++; }
     }
     S.movimientos.push(mv); n++;
   }
@@ -2885,6 +2933,7 @@ function informeHTML() {
     <h3 style="margin:22px 0 6px">Este mes</h3><table style="width:100%;border-collapse:collapse;font-size:14px">
       ${fila("Ingresado", eur(r.ingresos))}${fila("Gastado", eur(r.gastos))}${fila("Ahorrado e invertido", eur(r.ahorroNeto) + (r.rep.ahorroTotal ? " de " + eur0(r.rep.ahorroTotal) : ""))}${fila("Libre para ti", eur(r.presupuestoPersonal - r.gastoPer))}${fila("Cuenta corriente", eur(f.cuenta))}</table>
     ${av.length ? `<h3 style="margin:22px 0 6px">Lo que necesita tu atención</h3><ul style="padding-left:18px;font-size:14px;line-height:1.5">${av.map((a) => `<li>${esc(a.t)}</li>`).join("")}</ul>` : ""}
+    ${(() => { const P = planFuturos(); return P.pend.length ? `<h3 style="margin:22px 0 6px">Gastos previstos</h3><p style="font-size:14px;margin:0 0 6px">Aparta <b>${eur0(P.cuota)}</b> al mes${P.hasta ? " hasta " + mesLabel(P.hasta) : ""}. ${P.faltaEsteMes > 0 ? "Este mes te faltan " + eur0(P.faltaEsteMes) + "." : "Este mes vas al día."}</p><table style="width:100%;border-collapse:collapse;font-size:14px">${P.pend.map((f, i) => fila(esc(f.nombre) + " · " + mesLabel(f.mes), eur0(P.asig[i]) + " de " + eur0(f.importe))).join("")}</table>` : ""; })()}
     ${proy ? `<h3 style="margin:22px 0 6px">Proyectos</h3><table style="width:100%;border-collapse:collapse;font-size:14px">${proy}</table>` : ""}
     <h3 style="margin:22px 0 6px">Jubilación</h3><p style="font-size:14px;margin:0">En el escenario moderado cubrirías el ${pct(pj.escenarios[1].cobertura, 0)} de tu objetivo.</p>
     <p style="font-size:12px;color:#8a857b;margin-top:26px">Datos de tu última visita a la app (${fechaCorta(hoy())}). Puedes cambiar la frecuencia de este correo en Ajustes.</p></div>`;
@@ -2936,6 +2985,286 @@ function renderCorreo() {
     catch (err) { toast("Actualiza Codigo.gs y vuelve a intentarlo"); e.target.value = modo; }
   };
   $("#resYa").onclick = async () => { try { const r = await gs("enviarInformeAhora", informeHTML(), informeAsunto()); toast("Enviado a " + (r && r.to ? r.to : "tu correo")); } catch (e) { toast("No se pudo enviar: actualiza Codigo.gs"); } };
+}
+
+/* ---------- 15c. GASTOS PREVISTOS (renta, reformas, seguros…) ----------
+   Una sola "hucha": todo lo apartado (movimientos de ahorro con cat "futuro") va junto.
+   Se reparte entre los gastos por orden de fecha (primero lo que vence antes).
+   Cuota nivelada: la cantidad fija al mes más baja que llega a tiempo a TODAS las fechas.
+   "Para junio, a principios" = listo al acabar mayo. "A final de junio" = cuenta la nómina de junio. */
+let _planFut = null;
+const futuro = (id) => (S.futuros || []).find((f) => f.id === id);
+const mesListo = (f) => f.cuando === "final" ? f.mes : addMes(f.mes, -1);
+const esFut = (x) => x.cat === "futuro";
+function huchaFuturos() {
+  return r2(S.movimientos.filter(esFut).reduce((s, x) => s + (x.tipo === "ahorro" ? x.importe : x.tipo === "uso" || x.tipo === "retirada" ? -x.importe : 0), 0));
+}
+/* Lo apartado en un mes (solo = true: sin contar la línea de "pagos del mes") */
+function apartadoFutMes(m, solo) {
+  return r2(movsMes(m).filter((x) => esFut(x) && x.tipo === "ahorro" && (!solo || !x.pendiente)).reduce((s, x) => s + x.importe, 0));
+}
+function futMes(m) {
+  const mHoy = hoy().slice(0, 7), info = S.meses[m] || {};
+  if (m === mHoy && !info.cerrado) return planFuturos().cuota;
+  if (m > mHoy) return 0;
+  return info.futuro || 0;
+}
+function planFuturos(extra) {
+  if (!extra && _planFut && _planFut.dia === hoy()) return _planFut;
+  const mHoy = hoy().slice(0, 7);
+  const lista = (S.futuros || []).filter((f) => !f.pagado).concat(extra ? [extra] : []);
+  const pend = lista.sort((a, b) => mesListo(a).localeCompare(mesListo(b)) || a.importe - b.importe);
+  const hucha = huchaFuturos(), esteMes = apartadoFutMes(mHoy), antes = r2(hucha - esteMes);
+  const asignar = (cant) => { let r = Math.max(0, cant); return pend.map((f) => { const a = Math.min(f.importe, r); r = r2(r - a); return r2(a); }); };
+  const asig = asignar(hucha), asigAntes = asignar(antes);
+  const meses = pend.map((f) => Math.max(1, mesesEntre(mHoy, mesListo(f)) + 1));
+  let cum = 0, cuota = 0;
+  pend.forEach((f, i) => { cum += f.importe - asigAntes[i]; cuota = Math.max(cuota, cum / meses[i]); });
+  cuota = cuota > 0 ? Math.ceil(cuota - 0.005) : 0;
+  // calendario mes a mes
+  const filas = [], resto = pend.map((f, i) => r2(f.importe - asigAntes[i]));
+  const fin = pend.length ? pend.map((f) => f.mes).sort().pop() : null;
+  let saldo = antes;
+  for (let m = mHoy, k = 0; fin && m <= fin && k < 60; m = addMes(m, 1), k++) {
+    let disp = cuota; const partes = [];
+    pend.forEach((f, i) => {
+      if (disp <= 0 || resto[i] <= 0) return;
+      const a = r2(Math.min(resto[i], disp)); resto[i] = r2(resto[i] - a); disp = r2(disp - a); partes.push({ f, a });
+    });
+    const total = r2(cuota - disp);
+    saldo = r2(saldo + total);
+    const pagos = pend.filter((f) => f.mes === m);
+    saldo = r2(saldo - pagos.reduce((s, f) => s + f.importe, 0));
+    filas.push({ m, total, partes, listos: pend.filter((f) => mesListo(f) === m), pagos, saldo: Math.max(0, saldo) });
+  }
+  const necesario = r2(pend.reduce((s, f) => s + f.importe, 0));
+  const ultimoAporte = [...filas].reverse().find((x) => x.total > 0);
+  const out = {
+    pend, asig, meses, cuota, filas, hucha, esteMes, antes, necesario,
+    faltaEsteMes: r2(Math.max(0, cuota - esteMes)), sobrante: r2(Math.max(0, hucha - necesario)),
+    hasta: ultimoAporte ? ultimoAporte.m : null, dia: hoy(),
+  };
+  if (!extra) _planFut = out;
+  return out;
+}
+function capacidadFuturos(cuota) {
+  const mHoy = hoy().slice(0, 7), nom = S.movimientos.filter((x) => x.tipo === "nomina").map((x) => x.fecha.slice(0, 7)).sort();
+  const base = resumenMes(mHoy).base || (nom.length ? resumenMes(nom[nom.length - 1]).base : 0) || S.config.umbral;
+  const sin = calcularReparto(base, S.config, 0), con = calcularReparto(base, S.config, cuota);
+  return { base, sin, con, origen: S.config.futurosOrigen || "ahorro" };
+}
+/* Mantiene la línea "Apartar para gastos previstos" del mes actual al día */
+function sincronizarFuturosMes() {
+  _planFut = null;
+  const m = hoy().slice(0, 7), info = S.meses[m];
+  if (!info || info.cerrado || !(resumenMes(m).base > 0)) return false;
+  const cuota = planFuturos().cuota;
+  const linea = (info.pendientes || []).find((p) => p.key === "aho:futuros" && !p.hecho);
+  const hecha = (info.pendientes || []).some((p) => p.key === "aho:futuros" && p.hecho);
+  const esperado = hecha ? null : r2(Math.max(0, cuota - apartadoFutMes(m, true)));
+  if (info.futuro === cuota && (hecha || (linea ? linea.importe === esperado : esperado <= 0))) return false;
+  rehacerMes(m); return true;
+}
+
+/* --- Avisos --- */
+function avisosFuturos() {
+  const out = [], P = planFuturos(), mHoy = hoy().slice(0, 7);
+  P.pend.forEach((f, i) => {
+    if (mesListo(f) < mHoy) out.push({ n: "warn", t: f.nombre + ": la fecha (" + mesLabel(f.mes) + ") ya ha pasado. Si ya lo has pagado, márcalo como pagado.", go: "proyectos" });
+    else if (mesListo(f) === mHoy && P.asig[i] < f.importe) out.push({ n: "crit", t: f.nombre + ": lo necesitas " + (f.cuando === "final" ? "a final de " + mesNombre(f.mes) : "a principios de " + mesNombre(f.mes)) + " y faltan " + eur(f.importe - P.asig[i]) + ".", go: "proyectos" });
+  });
+  const r = resumenMes(mHoy);
+  if (P.cuota > 0 && r.base && !(S.meses[mHoy] || {}).cerrado) {
+    if (r.rep.futuroFalta > 0) out.push({ n: "crit", t: "Tus gastos previstos piden " + eur0(P.cuota) + " al mes y tu nómina solo da para " + eur0(r.rep.futuro) + ". Revisa importes o fechas.", go: "proyectos" });
+    else if (P.faltaEsteMes > 0 && Number(hoy().slice(8, 10)) >= 10) out.push({ n: "warn", t: "Este mes te quedan " + eur(P.faltaEsteMes) + " por apartar para tus gastos previstos.", go: "proyectos" });
+  }
+  if (P.sobrante > 1 && !P.pend.length) out.push({ n: "info", t: "Te sobran " + eur(P.sobrante) + " en la hucha de gastos previstos. Puedes devolverlos a la cuenta.", go: "proyectos" });
+  return out;
+}
+
+/* --- Pantalla --- */
+const cuandoTxt = (f) => (f.cuando === "final" ? "a final de " : "a principios de ") + mesLabel(f.mes);
+function futItem(f, i, P, compacto) {
+  const a = P.asig[i] || 0, listo = a >= f.importe - 0.005, prog = f.importe ? Math.min(1, a / f.importe) : 0;
+  const mesesQ = P.meses[i], vencido = mesListo(f) < hoy().slice(0, 7);
+  const pie = listo ? `<span class="st good"><i>✓</i> Listo</span>` : vencido ? `<span style="color:var(--warn)">Fecha pasada · faltan ${eur0(f.importe - a)}</span>` : `Faltan ${eur0(f.importe - a)} · ${mesesQ} ${mesesQ > 1 ? "meses para apartar" : "mes para apartar"}`;
+  return `<div class="proj" data-fut="${f.id}"><div class="proj-h"><b>${esc(f.nombre)}</b><span class="num">${eur0(a)} <span class="muted">de ${eur0(f.importe)}</span></span></div>
+    <div class="track"><div class="fill" style="width:${prog * 100}%;background:${listo ? "var(--good)" : "var(--brass)"}"></div></div>
+    <div class="proj-f"><span>${pie}</span><span>${cuandoTxt(f)}</span></div>
+    ${compacto ? "" : `<div class="btns" style="margin-top:10px"><button class="btn sm" data-futpagar="${f.id}">Marcar como pagado</button></div>`}</div>`;
+}
+function textoCapacidad(P) {
+  if (!P.cuota) return "";
+  const k = capacidadFuturos(P.cuota), mesFin = P.hasta ? mesNombre(P.hasta) + (P.hasta.slice(0, 4) !== hoy().slice(0, 4) ? " de " + P.hasta.slice(0, 4) : "") : "";
+  const invSin = k.sin.ahorroTotal - (k.sin.items.find((x) => x.resto) || { importe: 0 }).importe;
+  let t;
+  if (k.con.futuroFalta > 0) t = `<div class="note crit"><span class="ico">!</span><span>Con una nómina de ${eur0(k.base)} solo puedes apartar ${eur0(k.con.futuro)} al mes. Faltarían ${eur0(k.con.futuroFalta)}: retrasa alguna fecha o baja algún importe.</span></div>`;
+  else if (k.origen === "ahorro") {
+    const restoAho = r2(k.con.ahorroTotal - k.con.futuro - k.con.futuroDePersonal);
+    t = `<div class="muted">Sale de tu ahorro mensual de ${eur0(k.sin.ahorroTotal)}: hasta ${mesFin}, ${eur0(restoAho)} seguirán yendo a tus inversiones y ahorro${k.con.inversion < invSin - 0.5 ? " (tus inversiones fijas bajan de " + eur0(invSin) + " a " + eur0(k.con.inversion) + ")" : ""}${k.con.futuroDePersonal > 0 ? ", y " + eur0(k.con.futuroDePersonal) + " saldrán de tu dinero personal" : ""}.</div>`;
+  } else t = `<div class="muted">Sale de tu dinero personal: hasta ${mesFin} te quedarán ${eur0(k.con.personal)} al mes para ti en lugar de ${eur0(k.sin.personal)}${k.con.futuroDeAhorro > 0 ? ", y " + eur0(k.con.futuroDeAhorro) + " saldrán de tu ahorro" : ""}.${k.con.personal < S.config.minimoPersonal ? " Queda por debajo de tu mínimo de " + eur0(S.config.minimoPersonal) + "." : ""}</div>`;
+  return t;
+}
+function renderFuturos() {
+  const el = $("#futuros"); if (!el) return;
+  const P = planFuturos(), mHoy = hoy().slice(0, 7), pagados = (S.futuros || []).filter((f) => f.pagado).sort((a, b) => b.pagado.fecha.localeCompare(a.pagado.fecha));
+  if (!P.pend.length) {
+    el.innerHTML = `<div class="sub">Apunta los pagos grandes que sabes que llegarán: la renta, el IBI, el seguro del coche, una reforma… Te digo cuánto apartar cada mes para tenerlo listo a tiempo.</div>
+      <button class="btn sm gold" id="nuevoFut" style="margin-top:12px">Añadir gasto previsto</button>
+      ${P.sobrante > 1 ? `<div class="note info" style="margin-top:12px"><span class="ico">i</span><span>Te sobran ${eur(P.sobrante)} apartados. <button class="link" id="futDevolver">Devolver a la cuenta</button></span></div>` : ""}
+      ${pagados.length ? `<details style="margin-top:14px"><summary class="muted">Pagados (${pagados.length})</summary><ul class="rows">${pagados.map(filaPagado).join("")}</ul></details>` : ""}`;
+    return;
+  }
+  const origen = S.config.futurosOrigen || "ahorro", hecho = P.esteMes >= P.cuota - 0.5;
+  const verdict = P.cuota <= 0 ? `<div class="verdict good">Ya tienes <b>todo apartado</b>. Solo queda pagar cuando toque.</div>`
+    : hecho ? `<div class="verdict good">Este mes ya has apartado <b>${eur0(P.esteMes)}</b>. Vas al día.</div>`
+    : `<div class="verdict">Este mes llevas <b>${eur0(P.esteMes)}</b> de ${eur0(P.cuota)}. Te quedan <b>${eur0(P.faltaEsteMes)}</b> por apartar.</div>`;
+  // historia de meses anteriores (plan guardado frente a lo apartado)
+  const hist = [];
+  for (let m = addMes(mHoy, -6); m < mHoy; m = addMes(m, 1)) { const plan = (S.meses[m] || {}).futuro || 0, real = apartadoFutMes(m); if (plan > 0 || real > 0) hist.push({ m, plan, real }); }
+  const filasT = hist.map((h) => `<tr><td>${mesCorto(h.m)} ${h.m.slice(0, 4)}</td><td>${eur0(h.real)}${h.plan ? ` <span class="muted">de ${eur0(h.plan)}</span>` : ""}</td><td>${h.real >= h.plan - 0.5 ? `<span class="st good"><i>✓</i> Cumplido</span>` : `<span style="color:var(--warn)">Faltaron ${eur0(h.plan - h.real)}</span>`}</td><td></td></tr>`).join("")
+    + P.filas.map((x) => {
+      const actual = x.m === mHoy;
+      const para = x.partes.map((p) => esc(p.f.nombre) + " " + eur0(p.a)).join(" · ");
+      const nota = x.pagos.length ? `<div class="muted">Pagas: ${x.pagos.map((f) => esc(f.nombre)).join(", ")}</div>` : "";
+      return `<tr class="${actual ? "hit" : ""}"><td>${mesCorto(x.m)} ${x.m.slice(0, 4)}${actual ? " <span class=\"pill gold\">ahora</span>" : ""}</td><td><b>${x.total ? eur0(x.total) : "—"}</b></td><td>${para || (x.pagos.length ? "" : "—")}${nota}</td><td>${eur0(x.saldo)}</td></tr>`;
+    }).join("");
+  // gráfica: hucha real (pasado) y prevista (desde hoy)
+  let graf = "";
+  const ini = hist.length ? hist[0].m : mHoy, labels = [], real = [], plan = [];
+  for (let m = ini; m <= P.filas[P.filas.length - 1].m; m = addMes(m, 1)) {
+    labels.push(m);
+    const rr = r2(S.movimientos.filter((x) => esFut(x) && x.fecha.slice(0, 7) <= m).reduce((s, x) => s + (x.tipo === "ahorro" ? x.importe : -x.importe), 0));
+    real.push(m <= mHoy ? Math.max(0, rr) : null);
+    const fila = P.filas.find((y) => y.m === m);
+    plan.push(fila ? fila.saldo + fila.pagos.reduce((s, f) => s + f.importe, 0) : m === addMes(mHoy, -1) ? Math.max(0, P.antes) : null);
+  }
+  if (labels.length >= 2) graf = lineChart("fut", { labels: labels.map(mesCorto), tipLabels: labels.map(mesLabel), series: [{ name: "Plan", color: "var(--text-2)", values: plan, dash: true, noLabel: true }, { name: "Apartado", color: "var(--brass)", values: real, area: true }], label: "Hucha de gastos previstos: plan frente a lo apartado", h: 170, wide: true, endLabels: false });
+  el.innerHTML = `
+    <div class="stats">${stat("Aparta cada mes", eur0(P.cuota), P.hasta ? "hasta " + mesLabel(P.hasta) : "")}${stat("Llevas apartado", eur0(P.hucha), "de " + eur0(P.necesario))}</div>
+    <div style="margin-top:12px">${verdict}</div>
+    <div class="btns" style="margin:4px 0 12px">${P.faltaEsteMes > 0 ? `<button class="btn sm gold" id="futApartar">Apartar ${eur0(P.faltaEsteMes)} ahora</button>` : `<button class="btn sm" id="futApartar">Apartar dinero</button>`}<button class="btn sm" id="nuevoFut">Añadir gasto previsto</button></div>
+    <div class="seg" style="margin-bottom:8px"><button data-futorig="ahorro" class="${origen === "ahorro" ? "on" : ""}">Sale de mi ahorro</button><button data-futorig="personal" class="${origen === "personal" ? "on" : ""}">Sale de mi dinero personal</button></div>
+    ${textoCapacidad(P)}
+    <h3 style="margin:20px 0 4px">Tus gastos previstos</h3>
+    <div>${P.pend.map((f, i) => futItem(f, i, P)).join("")}</div>
+    ${P.sobrante > 1 ? `<div class="note info" style="margin-top:12px"><span class="ico">i</span><span>Tienes ${eur(P.sobrante)} de más en la hucha. <button class="link" id="futDevolver">Devolver a la cuenta</button></span></div>` : ""}
+    <h3 style="margin:20px 0 8px">Plan mes a mes</h3>
+    <div style="overflow-x:auto"><table class="tabla fut"><thead><tr><th>Mes</th><th>Apartar</th><th>Para qué</th><th>En la hucha</th></tr></thead><tbody>${filasT}</tbody></table></div>
+    <div class="muted" style="margin-top:8px">Primero se llena lo que vence antes. Si un mes apartas menos, los meses siguientes suben un poco para llegar a tiempo.</div>
+    ${graf ? `<h3 style="margin:20px 0 8px">Evolución de la hucha</h3>${graf}` : ""}
+    ${pagados.length ? `<details style="margin-top:14px"><summary class="muted">Pagados (${pagados.length})</summary><ul class="rows">${pagados.map(filaPagado).join("")}</ul></details>` : ""}`;
+}
+const filaPagado = (f) => `<li class="rowi click" data-fut="${f.id}"><div class="t"><b>${esc(f.nombre)}</b><span>Pagado el ${fechaCorta(f.pagado.fecha)} ${f.pagado.fecha.slice(0, 4)}${f.pagado.importe !== f.importe ? " · previsto " + eur0(f.importe) : ""}</span></div><span class="a">${eur(f.pagado.importe)}</span></li>`;
+function renderFuturosInicio() {
+  const el = $("#iFut"); if (!el) return;
+  const P = planFuturos();
+  if (!P.pend.length) { el.innerHTML = `<div class="sub">¿Tienes pagos grandes con fecha, como la renta o una reforma? Apúntalos y te digo cuánto apartar cada mes.</div><button class="btn sm" id="iNuevoFut" style="margin-top:12px">Añadir gasto previsto</button>`; return; }
+  const hecho = P.esteMes >= P.cuota - 0.5;
+  el.innerHTML = `<div class="stats">${stat("Aparta cada mes", eur0(P.cuota), P.hasta ? "hasta " + mesLabel(P.hasta) : "")}${stat("Este mes", hecho ? "Hecho" : eur0(P.faltaEsteMes), hecho ? eur0(P.esteMes) + " apartados" : "por apartar")}</div>
+    <div style="margin-top:6px">${P.pend.slice(0, 3).map((f, i) => futItem(f, i, P, true)).join("")}</div>`;
+}
+
+/* --- Hojas --- */
+function hojaFuturo(f) {
+  const nuevo = !f, mHoy = hoy().slice(0, 7);
+  const x = f || { nombre: "", importe: 0, mes: addMes(mHoy, 6), cuando: "inicio", notas: "" };
+  const pagado = !!(f && f.pagado);
+  abrirHoja(`<h2>${nuevo ? "Nuevo gasto previsto" : esc(x.nombre)}</h2>
+    ${pagado ? `<div class="note good" style="margin-bottom:12px"><span class="ico">✓</span><span>Pagado el ${fechaCorta(f.pagado.fecha)} ${f.pagado.fecha.slice(0, 4)}: ${eur(f.pagado.importe)}.</span></div>` : ""}
+    <div class="field"><label>Qué es</label><input id="fNom" value="${esc(x.nombre)}" placeholder="Ej. Declaración de la renta, Fachada y patio"></div>
+    <div class="row"><div><label>Importe (€)</label><input id="fImp" inputmode="decimal" value="${x.importe ? numTxt(x.importe) : ""}" placeholder="3.000"></div>
+      <div><label>¿Para cuándo?</label><input type="month" id="fMes" value="${x.mes}" min="${mHoy}"></div></div>
+    <label>Lo necesito</label>
+    <div class="seg" id="fCuando"><button data-c="inicio" class="${x.cuando !== "final" ? "on" : ""}">A principios de ese mes</button><button data-c="final" class="${x.cuando === "final" ? "on" : ""}">A final de ese mes</button></div>
+    <div class="field"><label>Notas</label><input id="fNotas" value="${esc(x.notas || "")}" placeholder="Opcional"></div>
+    <div class="preview" id="fPrev" style="margin-bottom:14px"></div>
+    <button class="btn gold full" id="fOk">${nuevo ? "Añadir al plan" : "Guardar cambios"}</button>
+    ${!nuevo ? `<div class="btns" style="margin-top:12px">${pagado ? `<button class="btn sm" id="fDeshacer">Deshacer el pago</button>` : `<button class="btn sm" id="fPagar">Marcar como pagado</button>`}<button class="btn sm danger" id="fDel">Borrar</button></div>` : ""}`, () => {
+    let cuando = x.cuando === "final" ? "final" : "inicio";
+    const leer = () => ({ id: f ? f.id : "_nuevo", nombre: $("#fNom").value.trim(), importe: r2(optNum($("#fImp").value) || 0), mes: $("#fMes").value || x.mes, cuando, notas: $("#fNotas").value.trim() });
+    const prev = () => {
+      const d = leer();
+      if (!(d.importe > 0) || !/^\d{4}-\d{2}$/.test(d.mes)) { $("#fPrev").innerHTML = "Escribe el importe y el mes para ver cuánto tendrás que apartar."; return; }
+      const guard = f && !f.pagado ? f : null;
+      if (guard) guard.pagado = { tmp: true };
+      const P = planFuturos(d);
+      if (guard) guard.pagado = null;
+      _planFut = null;
+      const i = P.pend.findIndex((y) => y.id === d.id), n = P.meses[i];
+      $("#fPrev").innerHTML = `Para tenerlo ${cuando === "final" ? "a final" : "a principios"} de ${mesLabel(d.mes)} tienes <b>${n} ${n > 1 ? "meses" : "mes"}</b> para apartar${cuando === "inicio" ? " (hasta " + mesNombre(mesListo(d)) + ")" : ""}. Con todos tus gastos previstos, apartarás <b>${eur0(P.cuota)} al mes</b>.`;
+    };
+    $$("#fCuando button").forEach((btn) => btn.onclick = () => { cuando = btn.dataset.c; $$("#fCuando button").forEach((z) => z.classList.toggle("on", z === btn)); prev(); });
+    ["#fImp", "#fMes", "#fNom"].forEach((s) => $(s).addEventListener("input", prev));
+    prev();
+    $("#fOk").onclick = () => {
+      const d = leer();
+      if (!d.nombre) return toast("Escribe qué es");
+      if (!(d.importe > 0)) return toast("Escribe el importe");
+      if (!/^\d{4}-\d{2}$/.test(d.mes)) return toast("Elige el mes");
+      if (nuevo) S.futuros.push({ ...d, id: uid(), creado: hoy(), pagado: null });
+      else Object.assign(f, { nombre: d.nombre, importe: d.importe, mes: d.mes, cuando: d.cuando, notas: d.notas });
+      sincronizarFuturosMes(); save(); cerrarHoja(); render();
+      toast(nuevo ? "Añadido. Aparta " + eur0(planFuturos().cuota) + " al mes" : "Guardado");
+    };
+    if (!nuevo) {
+      $("#fDel").onclick = () => {
+        if (!confirm("¿Borrar “" + f.nombre + "”?" + (f.pagado ? " También se borrarán sus movimientos de pago." : " Lo que tengas apartado se queda en la hucha para los demás."))) return;
+        if (f.pagado) S.movimientos = S.movimientos.filter((m) => !(f.pagado.movIds || []).includes(m.id));
+        S.futuros = S.futuros.filter((y) => y.id !== f.id); sincronizarFuturosMes(); save(); cerrarHoja(); render(); toast("Borrado");
+      };
+      if (pagado) $("#fDeshacer").onclick = () => { S.movimientos = S.movimientos.filter((m) => !(f.pagado.movIds || []).includes(m.id)); f.pagado = null; sincronizarFuturosMes(); save(); cerrarHoja(); render(); toast("Pago deshecho"); };
+      else $("#fPagar").onclick = () => hojaPagarFuturo(f);
+    }
+  });
+}
+function hojaPagarFuturo(f) {
+  if (!f || f.pagado) return;
+  const P = planFuturos(), i = P.pend.findIndex((y) => y.id === f.id), asig = i >= 0 ? P.asig[i] : 0;
+  abrirHoja(`<h2>Pagar ${esc(f.nombre)}</h2>
+    <div class="sub" style="margin-bottom:14px">Tienes <b class="num" style="color:var(--text)">${eur(asig)}</b> apartados para esto.</div>
+    <div class="row"><div><label>Fecha</label><input type="date" id="gFecha" value="${hoy()}"></div><div><label>Importe pagado (€)</label><input id="gImpP" inputmode="decimal" value="${numTxt(f.importe)}"></div></div>
+    <div class="preview" id="gPrev" style="margin-bottom:14px"></div>
+    <button class="btn gold full" id="gOk">Marcar como pagado</button>`, () => {
+    const prev = () => {
+      const v = r2(optNum($("#gImpP").value) || 0), usa = Math.min(asig, v);
+      $("#gPrev").innerHTML = !(v > 0) ? "Escribe lo que has pagado." : `Se apunta el gasto de ${eur(v)}. ${usa > 0 ? "Usas " + eur(usa) + " de lo apartado" : "No tenías nada apartado"}${v > asig ? " y " + eur(v - asig) + " salen de tu cuenta" : ""}.${asig > v ? " Los " + eur(asig - v) + " que sobran se quedan en la hucha para los demás gastos." : ""} No cuenta en tu presupuesto del mes.`;
+    };
+    $("#gImpP").addEventListener("input", prev); prev();
+    $("#gOk").onclick = () => {
+      const v = r2(optNum($("#gImpP").value) || 0), fecha = $("#gFecha").value || hoy();
+      if (!(v > 0)) return toast("Escribe el importe");
+      const usa = r2(Math.min(asig, v)), ids = [];
+      const g = { id: uid(), fecha, concepto: f.nombre, importe: v, tipo: "gasto", cat: "previsto", futuroId: f.id }; S.movimientos.push(g); ids.push(g.id);
+      if (usa > 0) { const u = { id: uid(), fecha, concepto: "Usado de lo apartado · " + f.nombre, importe: usa, tipo: "uso", cat: "futuro", futuroId: f.id }; S.movimientos.push(u); ids.push(u.id); }
+      f.pagado = { fecha, importe: v, movIds: ids };
+      sincronizarFuturosMes(); save(); cerrarHoja(); render(); toast("Pagado. ¡Objetivo cumplido!");
+    };
+  });
+}
+function hojaApartar() {
+  const P = planFuturos();
+  abrirHoja(`<h2>Apartar para gastos previstos</h2>
+    <div class="sub" style="margin-bottom:14px">Pásalo a una cuenta o hucha aparte en tu banco y apúntalo aquí. ${P.faltaEsteMes > 0 ? "Este mes te quedan " + eur(P.faltaEsteMes) + "." : "Este mes ya vas al día; lo que apartes de más adelanta los meses siguientes."}</div>
+    <div class="row"><div><label>Fecha</label><input type="date" id="hFecha" value="${hoy()}"></div><div><label>Importe (€)</label><input id="hImp" inputmode="decimal" value="${P.faltaEsteMes > 0 ? numTxt(P.faltaEsteMes) : ""}" placeholder="0,00"></div></div>
+    <button class="btn gold full" id="hOk">Apartar</button>`, () => {
+    $("#hOk").onclick = () => {
+      const v = r2(optNum($("#hImp").value) || 0), fecha = $("#hFecha").value || hoy();
+      if (!(v > 0)) return toast("Escribe el importe");
+      const m = fecha.slice(0, 7), info = S.meses[m];
+      const linea = info && (info.pendientes || []).find((p) => p.key === "aho:futuros" && !p.hecho);
+      if (linea && Math.abs(linea.importe - v) < 0.01) { cerrarHoja(); return marcarPendiente(m, linea.id, v); }
+      S.movimientos.push({ id: uid(), fecha, concepto: "Apartado para gastos previstos", importe: v, tipo: "ahorro", cat: "futuro" });
+      sincronizarFuturosMes(); save(); cerrarHoja(); render(); toast("Apartado " + eur(v));
+    };
+  });
+}
+function devolverSobrante() {
+  const P = planFuturos();
+  if (!(P.sobrante > 0)) return;
+  if (!confirm("¿Devolver " + eur(P.sobrante) + " de la hucha a tu cuenta corriente?")) return;
+  S.movimientos.push({ id: uid(), fecha: hoy(), concepto: "Sobrante de gastos previstos", importe: P.sobrante, tipo: "uso", cat: "futuro" });
+  save(); render(); toast("Devuelto a la cuenta");
 }
 
 /* ---------- 16. TOOLTIP ---------- */
