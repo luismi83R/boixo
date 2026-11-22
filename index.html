@@ -239,6 +239,15 @@ details > summary::-webkit-details-marker{display:none}
 .tabla th{text-align:right;font-weight:500;color:var(--text-2);padding:6px 6px;border-bottom:1px solid var(--line-2);position:sticky;top:0;background:var(--surface)}
 .tabla td{text-align:right;padding:6px;border-bottom:1px solid var(--line)}
 .tabla th:first-child,.tabla td:first-child{text-align:left}
+.rp-row{display:grid;grid-template-columns:minmax(0,1fr) 112px 108px;gap:12px;align-items:center;padding:12px 0;border-top:1px solid var(--line)}
+.rp-t{min-width:0}.rp-t b{display:block;font-weight:500;margin-bottom:2px}.rp-t span{display:block;font-size:12.5px;color:var(--text-2);line-height:1.4}
+.rp-dest .rp-t{display:flex;flex-direction:row;gap:8px}.rp-dest .rp-t select:first-child{flex:1;min-width:0;max-width:380px}.rp-mini{font-size:12.5px;padding:6px 28px 6px 10px;width:auto;flex:none}
+.rp-in{display:flex;align-items:center;gap:6px;min-width:0}.rp-in input{width:100%;min-width:0;text-align:right}.rp-in select{width:auto;flex:none}
+.rp-v{text-align:right;display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.rp-total{border-top:1px solid var(--line-2)}.rp-total b{font-family:var(--serif);font-weight:400;font-size:18px}
+.rp-dest{grid-template-columns:minmax(0,1fr) 150px 108px}
+@media (max-width:600px){.rp-row{grid-template-columns:minmax(0,1fr) 92px 96px;gap:8px}
+ .rp-dest{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.rp-dest .rp-t{grid-column:1/-1;flex-direction:row}.rp-dest .rp-t select:first-child{flex:1;min-width:0}}
 .tabla tr.hit td{color:var(--brass)}
 .tabla.fut td:nth-child(3),.tabla.fut th:nth-child(3){text-align:left;white-space:normal;min-width:150px}.tabla.fut td{vertical-align:top;white-space:nowrap}
 @media (min-width:960px){ .mes-acc{display:none!important} }
@@ -549,14 +558,16 @@ body.privado .hero-num,body.privado .hero-sub b,body.privado .stat .v,body.priva
         <div class="row"><div><label>Perfil de riesgo</label><select data-perfil="riesgo"><option>Conservador</option><option>Moderado</option><option>Dinámico</option></select></div><div><label>Inversión mensual para el plan (€)</label><input data-perfil="aportacionMensual" inputmode="decimal" placeholder="Automática"></div></div>
       </div>
     </section>
+    <section class="block wide">
+      <h2>Tu reparto de la nómina</h2>
+      <div class="muted" style="margin:-4px 0 14px">Tú decides los porcentajes y a dónde va cada parte. La app hace el reparto cada vez que registras la nómina.</div>
+      <div id="repartoCfg"></div>
+    </section>
     <section class="block">
-      <h2>Reparto del sueldo</h2>
+      <h2>Otros ajustes</h2>
       <div class="panel">
-        <div class="row"><div><label>Necesidades (% del sueldo)</label><input data-cfg="necesidadesPct" data-pct inputmode="decimal"></div><div><label>Ahorro mínimo (%)</label><input data-cfg="ahorroMinPct" data-pct inputmode="decimal"></div></div>
-        <div class="row"><div><label>Ahorro fijo (€/mes)</label><input data-cfg="ahorroFijo" inputmode="decimal"></div><div><label>A partir de un sueldo de (€)</label><input data-cfg="umbral" inputmode="decimal"></div></div>
-        <div class="row"><div><label>Mínimo para ti (€)</label><input data-cfg="minimoPersonal" inputmode="decimal"></div><div><label>Fondo de emergencia (€)</label><input data-cfg="fondoObjetivo" inputmode="decimal"></div></div>
+        <div class="row"><div><label>Fondo de emergencia (€)</label><input data-cfg="fondoObjetivo" inputmode="decimal"></div><div><label>Saldo de partida de la cuenta (€)</label><input data-cfg="saldoInicial" inputmode="decimal"></div></div>
         <div class="row"><div><label>Aviso de deudas (%)</label><input data-cfg="deudaAviso" data-pct inputmode="decimal"></div><div><label>Máximo de deudas (%)</label><input data-cfg="deudaMax" data-pct inputmode="decimal"></div></div>
-        <div class="field" style="margin:0"><label>Saldo de partida de la cuenta corriente (€)</label><input data-cfg="saldoInicial" inputmode="decimal"></div>
       </div>
     </section>
     <section class="block">
@@ -585,11 +596,6 @@ body.privado .hero-num,body.privado .hero-sub b,body.privado .stat .v,body.priva
     </section>
     <section class="block"><h2>Resumen por correo</h2><div id="correo"></div></section>
     <section class="block"><h2>Pantalla completa en el iPhone</h2><div id="conexion"></div></section>
-    <section class="block">
-      <h2>Reparto del ahorro</h2>
-      <div class="muted" style="margin:-4px 0 8px">Importes fijos al mes. Lo que sobra del ahorro va a la última línea.</div>
-      <table class="cfg-t"><tbody id="ahoT"></tbody></table>
-    </section>
     <section class="block">
       <h2>Datos</h2>
       <div class="muted" style="margin-bottom:12px">Haz una copia completa de vez en cuando desde la pestaña Mes.</div>
@@ -657,7 +663,7 @@ const DEFAULT_STATE = () => ({
   version: 3,
   config: {
     necesidadesPct: 0.50, ahorroMinPct: 0.20, ahorroFijo: 1000, umbral: 3000, minimoPersonal: 600,
-    deudaAviso: 0.30, deudaMax: 0.35, fondoObjetivo: 4500, saldoInicial: 0, fechaSaldo: "", presuCat: {}, resumen: "no", futurosOrigen: "ahorro",
+    deudaAviso: 0.30, deudaMax: 0.35, fondoObjetivo: 4500, saldoInicial: 0, fechaSaldo: "", presuCat: {}, resumen: "no", futurosOrigen: "necesidades", repartoModo: "reglas",
     perfil: { nombre: "", edad: 42, edadJubilacion: 67, esperanzaVida: 95, ingresosDeseados: 24000, pensionEstimada: 0, rentabilidad: 0.08, inflacion: 0.025, riesgo: "Moderado", aportacionMensual: null },
     trabajo: { modo: "jornada", sueldoFijo: 0, tarifaDia: 135, horaExtra: 17, sabado: 150, plusNombre: "Gasoil", plus: 90, inicio: "08:00", finLV: "18:00", corteViernes: "12:00" },
     fijos: [
@@ -721,6 +727,7 @@ function migrar(s) {
   s.cartera.activos = s.cartera.activos.map((a) => Object.assign(nuevoActivo(a.id, a.nombre, a.clase), a, { inicio: a.inicio || { fecha: "", aportado: 0 } }));
   s.proyectos = s.proyectos || [];
   s.futuros = s.futuros || [];
+  if (s.config.futurosOrigen !== "personal") s.config.futurosOrigen = "necesidades";
   s.ia = s.ia || { chat: [] };
   s.historico = s.historico || {};
   s.deudas = s.deudas || [];
@@ -798,30 +805,35 @@ const fechaMovEnMes = (m) => hoy().slice(0, 7) === m ? hoy() : (m < hoy().slice(
 
 /* ---------- 4. REGLAS DEL MES ---------- */
 function calcularReparto(base, c = S.config, fut = 0) {
-  if (!base || base <= 0) return { base: 0, necesidades: 0, personal: 0, ahorro: 0, inversion: 0, ahorroTotal: 0, items: [], futuro: 0, futuroFalta: r2(fut || 0), futuroDeAhorro: 0, futuroDePersonal: 0 };
+  if (!base || base <= 0) return { base: 0, necesidades: 0, personal: 0, ahorro: 0, inversion: 0, ahorroTotal: 0, items: [], futuro: 0, futuroFalta: r2(fut || 0), futuroOrigen: c.futurosOrigen || "necesidades", necFijos: 0, necLibre: 0 };
   const nec = r2(base * c.necesidadesPct);
-  let A = base >= c.umbral ? c.ahorroFijo : Math.max(base * c.ahorroMinPct, Math.min(c.ahorroFijo, base - nec - c.minimoPersonal));
-  A = r2(Math.max(0, Math.min(A, base - nec)));
-  const libre = r2(base - nec - A);
-  // Gastos previstos: salen del ahorro o del dinero personal, según la preferencia
-  let deAhorro = 0, dePersonal = 0;
-  if (fut > 0) {
-    if ((c.futurosOrigen || "ahorro") === "ahorro") { deAhorro = Math.min(fut, A); dePersonal = Math.max(0, Math.min(libre, fut - deAhorro)); }
-    else { dePersonal = Math.max(0, Math.min(libre, fut)); deAhorro = Math.min(A, fut - dePersonal); }
+  const fijos = c.repartoAhorro.filter((x) => !x.resto).map((x) => ({ ...x, importe: x.unidad === "pct" ? r2(base * (x.pct || 0)) : x.importe }));
+  const sumaFijos = r2(fijos.reduce((a, x) => a + x.importe, 0));
+  let A;
+  if (c.repartoModo === "porcentajes") A = base * c.ahorroMinPct + sumaFijos;   // tus porcentajes: ahorro % + cada destino
+  else {
+    A = base >= c.umbral ? c.ahorroFijo : Math.max(base * c.ahorroMinPct, Math.min(c.ahorroFijo, base - nec - c.minimoPersonal));
+    // El ahorro es intocable: como mínimo el % mínimo de la nómina a ahorro + las aportaciones fijas a inversión
+    A = Math.max(A, base * c.ahorroMinPct + sumaFijos);
   }
-  deAhorro = r2(deAhorro); dePersonal = r2(dePersonal);
-  const futuro = r2(deAhorro + dePersonal), pool = r2(A - deAhorro);
-  const ahorroTotal = r2(A + dePersonal), personal = r2(libre - dePersonal);
-  const fijos = c.repartoAhorro.filter((x) => !x.resto);
-  const sumaFijos = fijos.reduce((a, x) => a + x.importe, 0);
-  const factor = pool >= sumaFijos ? 1 : (sumaFijos ? pool / sumaFijos : 0);
-  const items = futuro > 0 ? [{ id: "futuros", nombre: "Apartar para gastos previstos", importe: futuro, tipo: "ahorro", futuro: true }] : [];
-  items.push(...fijos.map((x) => ({ ...x, importe: r2(x.importe * factor) })));
+  A = r2(Math.max(0, Math.min(A, base - nec)));
+  let personal = r2(base - nec - A);
+  // Gastos previstos (renta, reformas…): salen de necesidades o del dinero personal, nunca del ahorro
+  const origen = c.futurosOrigen === "personal" ? "personal" : "necesidades";
+  let futuro = 0;
+  if (fut > 0) {
+    if (origen === "necesidades") futuro = r2(fut);
+    else { futuro = r2(Math.min(fut, Math.max(0, personal))); personal = r2(personal - futuro); }
+  }
+  const factor = A >= sumaFijos ? 1 : (sumaFijos ? A / sumaFijos : 0);
+  const items = fijos.map((x) => ({ ...x, importe: r2(x.importe * factor) }));
   const resto = c.repartoAhorro.find((x) => x.resto);
-  const restoImp = r2(pool - items.filter((x) => !x.futuro).reduce((a, x) => a + x.importe, 0));
+  const restoImp = r2(A - items.reduce((a, x) => a + x.importe, 0));
   if (resto && restoImp > 0) items.push({ ...resto, importe: restoImp });
   const inversion = r2(items.filter((x) => x.tipo === "inversion").reduce((a, x) => a + x.importe, 0));
-  return { base, necesidades: nec, personal, ahorro: r2(ahorroTotal - inversion), inversion, ahorroTotal, items, futuro, futuroFalta: r2(Math.max(0, fut - futuro)), futuroDeAhorro: deAhorro, futuroDePersonal: dePersonal };
+  const necFijos = r2(c.fijos.filter((f) => f.cat === "necesidades").reduce((a, f) => a + f.importe, 0));
+  return { base, necesidades: nec, personal, ahorro: r2(A - inversion), inversion, ahorroTotal: A, items, futuro, futuroFalta: r2(Math.max(0, fut - futuro)), futuroOrigen: origen,
+    necFijos, necLibre: r2(nec - necFijos - (origen === "necesidades" ? futuro : 0)) };
 }
 const SIGNO = { nomina: 1, ingreso: 1, gasto: -1, ahorro: -1, inversion: -1, retirada: 1, traspaso: 0, uso: 1 };
 const TIPO_TXT = { nomina: "Nómina", ingreso: "Ingreso", gasto: "Gasto", ahorro: "A ahorro", inversion: "Inversión", retirada: "Sacado de ahorro", traspaso: "Traspaso", uso: "Usado de lo apartado" };
@@ -839,16 +851,17 @@ function resumenMes(m) {
   const gastoPrev = sum((x) => x.tipo === "gasto" && x.cat === "previsto");
   const gastoPer = sum((x) => x.tipo === "gasto" && x.cat !== "necesidades" && x.cat !== "proyecto" && x.cat !== "previsto");
   const usos = sum((x) => x.tipo === "uso");
-  const ahorro = sum((x) => x.tipo === "ahorro"), inversion = sum((x) => x.tipo === "inversion"), retiradas = sum((x) => x.tipo === "retirada");
+  const apartadoFut = sum((x) => x.tipo === "ahorro" && x.cat === "futuro");
+  const ahorro = sum((x) => x.tipo === "ahorro" && x.cat !== "futuro"), inversion = sum((x) => x.tipo === "inversion"), retiradas = sum((x) => x.tipo === "retirada");
   const ingresos = r2(base + otrosIngresos + ingresosProy);
   const gastos = r2(gastoNec + gastoPer + gastoProy + gastoPrev);
-  const saldoMes = r2(ingresos - gastos - ahorro - inversion + retiradas + usos);
+  const saldoMes = r2(ingresos - gastos - ahorro - inversion - apartadoFut + retiradas + usos);
   const deudas = r2(S.config.fijos.filter((f) => f.deuda).reduce((a, f) => a + f.importe, 0));
   const info = S.meses[m] || {};
   const pendientes = (info.pendientes || []).filter((p) => !p.hecho);
   const pendienteTotal = r2(pendientes.reduce((a, p) => a + p.importe, 0));
-  return { mes: m, base, rep, otrosIngresos, ingresosProy, ingresos, gastoNec, gastoPer, gastoProy, gastoPrev, usos, gastos, ahorro, inversion, retiradas, saldoMes,
-    ahorroNeto: r2(ahorro + inversion - retiradas), deudas, ratioDeuda: base ? deudas / base : 0, presupuestoPersonal: r2(rep.personal + otrosIngresos),
+  return { mes: m, base, rep, otrosIngresos, ingresosProy, ingresos, gastoNec, gastoPer, gastoProy, gastoPrev, usos, apartadoFut, gastos, ahorro, inversion, retiradas, saldoMes,
+    ahorroNeto: r2(ahorro + inversion - retiradas), deudas, ratioDeuda: base ? deudas / base : 0, presupuestoPersonal: r2(rep.personal + otrosIngresos), necUsado: r2(gastoNec + (rep.futuroOrigen === "necesidades" ? apartadoFut : 0)), perUsado: r2(gastoPer + (rep.futuroOrigen === "personal" ? apartadoFut : 0)),
     pendientes, pendienteTotal, cerrado: !!info.cerrado, nMovs: mv.length };
 }
 const saldoCuenta = () => r2(S.movimientos.reduce((a, x) => a + SIGNO[x.tipo] * x.importe, S.config.saldoInicial));
@@ -863,10 +876,10 @@ function rehacerMes(m) {
   if (base > 0) {
     for (const f of S.config.fijos) { const key = "fijo:" + f.id; if (!hechosKeys.has(key)) nuevos.push({ id: uid(), key, concepto: f.nombre, importe: f.importe, tipo: "gasto", cat: f.cat, hecho: false }); }
     info.futuro = futMes(m);
-    const manual = apartadoFutMes(m, true);
-    for (const it of calcularReparto(base, S.config, info.futuro).items) {
-      const key = "aho:" + it.id;
-      if (it.futuro) { const imp = r2(it.importe - manual); if (!hechosKeys.has(key) && imp > 0) nuevos.push({ id: uid(), key, concepto: it.nombre, importe: imp, tipo: "ahorro", cat: "futuro", hecho: false }); continue; } if (!hechosKeys.has(key)) nuevos.push({ id: uid(), key, concepto: it.nombre, importe: it.importe, tipo: it.tipo, cat: it.tipo, activoId: it.id, hecho: false }); }
+    const manual = apartadoFutMes(m, true), rep = calcularReparto(base, S.config, info.futuro);
+    const impF = r2(rep.futuro - manual);
+    if (!hechosKeys.has("aho:futuros") && impF > 0) nuevos.push({ id: uid(), key: "aho:futuros", concepto: "Apartar para gastos previstos", importe: impF, tipo: "ahorro", cat: "futuro", hecho: false });
+    for (const it of rep.items) { const key = "aho:" + it.id; if (!hechosKeys.has(key)) nuevos.push({ id: uid(), key, concepto: it.nombre, importe: it.importe, tipo: it.tipo, cat: it.tipo, activoId: it.id, hecho: false }); }
   }
   info.pendientes = [...hechos, ...nuevos];
 }
@@ -1194,9 +1207,9 @@ function avisos(m) {
   else {
     if (r.ratioDeuda > c.deudaMax) out.push({ n: "crit", t: "Tus deudas son el " + pct(r.ratioDeuda) + " del sueldo, por encima del " + pct(c.deudaMax) + ".", go: "mes" });
     else if (r.ratioDeuda > c.deudaAviso) out.push({ n: "warn", t: "Tus deudas son el " + pct(r.ratioDeuda) + " del sueldo, cerca del límite del " + pct(c.deudaMax) + ".", go: "mes" });
-    if (r.gastoNec > r.rep.necesidades) out.push({ n: "crit", t: "Necesidades: te pasas " + eur(r.gastoNec - r.rep.necesidades) + ".", go: "mes" });
-    if (r.gastoPer > r.presupuestoPersonal) out.push({ n: "crit", t: "Gasto personal: te pasas " + eur(r.gastoPer - r.presupuestoPersonal) + ".", go: "mes" });
-    else if (r.presupuestoPersonal && r.gastoPer > 0.85 * r.presupuestoPersonal) out.push({ n: "warn", t: "Has usado el " + pct(r.gastoPer / r.presupuestoPersonal, 0) + " de tu dinero personal del mes.", go: "mes" });
+    if (r.necUsado > r.rep.necesidades) out.push({ n: "crit", t: "Necesidades: te pasas " + eur(r.necUsado - r.rep.necesidades) + ".", go: "mes" });
+    if (r.perUsado > r.presupuestoPersonal) out.push({ n: "crit", t: "Gasto personal: te pasas " + eur(r.perUsado - r.presupuestoPersonal) + ".", go: "mes" });
+    else if (r.presupuestoPersonal && r.perUsado > 0.85 * r.presupuestoPersonal) out.push({ n: "warn", t: "Has usado el " + pct(r.perUsado / r.presupuestoPersonal, 0) + " de tu dinero personal del mes.", go: "mes" });
     if (saldoCuenta() - r.pendienteTotal < 0) out.push({ n: "crit", t: "Con los pagos pendientes, la cuenta quedaría en " + eur(saldoCuenta() - r.pendienteTotal) + ".", go: "mes" });
     if (r.retiradas > 0 && resumenMes(addMes(m, -1)).retiradas > 0) out.push({ n: "warn", t: "Dos meses seguidos sacando de tus ahorros.", go: "mes" });
   }
@@ -1256,7 +1269,7 @@ function disciplina() {
   const filas = meses.map((m) => {
     const r = resumenMes(m), t = resumenTrabajo(m), actual = m === mHoy;
     const ahorro = !r.base ? null : r.ahorroNeto >= r.rep.ahorroTotal * 0.98 ? true : actual ? null : false;
-    const presu = !r.base ? null : r.gastoPer <= r.presupuestoPersonal + 0.5 ? true : false;
+    const presu = !r.base ? null : r.perUsado <= r.presupuestoPersonal + 0.5 ? true : false;
     const trabajo = t.dias.length || t.cobro ? (t.errores === 0) : (actual ? null : null);
     return { m, ahorro, presu, trabajo };
   });
@@ -1438,7 +1451,7 @@ function renderInicio() {
 
   const m = hoy().slice(0, 7), r = resumenMes(m);
   $("#iMesT").textContent = "En " + mesNombre(m);
-  const libre = r2(r.presupuestoPersonal - r.gastoPer);
+  const libre = r2(r.presupuestoPersonal - r.perUsado);
   $("#iMes").innerHTML = r.base || r.nMovs ? `<div class="stats">${stat("Ingresado", eur(r.ingresos))}${stat("Gastado", eur(r.gastos))}${stat("Ahorrado e invertido", eur(r.ahorroNeto), r.rep.ahorroTotal ? "de " + eur(r.rep.ahorroTotal) : "")}${stat("Libre para ti", eur(libre), r.presupuestoPersonal ? "de " + eur(r.presupuestoPersonal) : "")}</div>`
     : `<div class="sub">Aún no hay movimientos este mes. Empieza registrando tu nómina.</div><button class="btn sm" data-go="mes" style="margin-top:12px">Registrar nómina</button>`;
 
@@ -1476,13 +1489,15 @@ function renderReparto(r) {
   el.innerHTML = `<div class="sub" style="margin-bottom:12px">Nómina de <b class="num" style="color:var(--text)">${eur(r.base)}</b>${r.base >= S.config.umbral ? ", con ahorro fijo de " + eur0(S.config.ahorroFijo) : ", por debajo de " + eur0(S.config.umbral) + ": ahorro ajustado"}.</div>
     <div class="compo" style="margin:0 0 14px;height:8px">${vals.map((c) => `<span style="flex:${c.val};background:${col(c.v)}" data-tip="${c.n}: ${eur(c.val)}"></span>`).join("")}</div>
     <div class="compo-leg">${vals.map((c) => `<div><span class="sw" style="background:${col(c.v)}"></span>${c.n}<b>${eur(c.val)}</b></div>`).join("")}</div>
+    ${r.rep.futuro > 0 ? `<div class="muted" style="margin-top:12px">${r.rep.futuroOrigen === "necesidades" ? `De necesidades: ${eur(r.rep.necFijos)} en pagos fijos, ${eur(r.rep.futuro)} para apartar a gastos previstos y <b style="color:${r.rep.necLibre < 0 ? "var(--crit)" : "var(--text)"}">${eur(r.rep.necLibre)}</b> para el resto (comida, gasoil…).` : `De tu dinero personal salen ${eur(r.rep.futuro)} para gastos previstos.`}</div>` : ""}
     ${r.rep.items.length ? `<div class="muted" style="margin-top:12px">El ahorro va a: ${r.rep.items.map((i) => esc(i.nombre) + " (" + eur(i.importe) + ")").join(", ")}.</div>` : ""}`;
 }
 function renderMeters(r) {
   const el = $("#meters");
   if (!r.base && !r.nMovs) { el.innerHTML = `<div class="sub">Sin datos este mes.</div>`; return; }
-  el.innerHTML = meter("Necesidades", r.gastoNec, r.rep.necesidades, col("--c1"), { gasto: true }) + meter("Personal", r.gastoPer, r.presupuestoPersonal, col("--c2"), { gasto: true })
+  el.innerHTML = meter("Necesidades", r.necUsado, r.rep.necesidades, col("--c1"), { gasto: true }) + meter("Personal", r.perUsado, r.presupuestoPersonal, col("--c2"), { gasto: true })
     + meter("Ahorro", r2(r.ahorro - r.retiradas), r.rep.ahorro, col("--c3")) + meter("Inversión", r.inversion, r.rep.inversion, col("--c4"))
+    + (r.apartadoFut ? `<div class="muted" style="margin-top:6px">${r.rep.futuroOrigen === "necesidades" ? "Necesidades" : "Personal"} incluye ${eur(r.apartadoFut)} apartados para gastos previstos.</div>` : "")
     + (r.gastoPrev ? `<div class="muted" style="margin-top:6px">Gastos previstos pagados este mes: ${eur(r.gastoPrev)}, con lo que tenías apartado. No cuentan en tu presupuesto.</div>` : "")
     + (r.gastoProy || r.ingresosProy ? `<div class="muted" style="margin-top:6px">Proyectos este mes: ${eur(r.gastoProy)} gastados${r.ingresosProy ? ", " + eur(r.ingresosProy) + " ingresados" : ""}.</div>` : "");
 }
@@ -2000,7 +2015,7 @@ function renderCategoriasCfg() {
 }
 function renderCfg() {
   const c = S.config;
-  renderRevision(); renderCorreo(); renderConexion(); renderCategoriasCfg();
+  renderRevision(); renderCorreo(); renderConexion(); renderCategoriasCfg(); renderRepartoCfg();
   $$("[data-cfg]").forEach((inp) => { if (document.activeElement !== inp) { const v = c[inp.dataset.cfg]; inp.value = inp.hasAttribute("data-pct") ? numTxt(v * 100) : numTxt(v); } });
   $$("[data-perfil]").forEach((inp) => { if (document.activeElement !== inp) { const v = c.perfil[inp.dataset.perfil]; inp.value = v == null ? "" : inp.tagName === "SELECT" || typeof v === "string" ? v : inp.hasAttribute("data-pct") ? numTxt(v * 100) : numTxt(v); } });
   $$("[data-trab]").forEach((inp) => { if (document.activeElement !== inp) { const v = c.trabajo[inp.dataset.trab]; inp.value = inp.type === "time" || inp.tagName === "SELECT" || typeof v === "string" ? v : numTxt(v); } });
@@ -2010,7 +2025,7 @@ function renderCfg() {
     <tr><td style="width:34%"><input data-fijo="${f.id}" data-k="importe" inputmode="decimal" value="${numTxt(f.importe)}" aria-label="Importe"></td>
       <td><select data-fijo="${f.id}" data-k="cat" aria-label="Categoría"><option value="necesidades" ${f.cat === "necesidades" ? "selected" : ""}>Necesidad</option><option value="personal" ${f.cat !== "necesidades" ? "selected" : ""}>Personal</option></select></td>
       <td colspan="2"><label class="chk" style="margin:0"><input type="checkbox" data-fijo="${f.id}" data-k="deuda" ${f.deuda ? "checked" : ""}> Deuda</label></td></tr>`).join("");
-  $("#ahoT").innerHTML = c.repartoAhorro.map((a) => `
+  if ($("#ahoT")) $("#ahoT").innerHTML = c.repartoAhorro.map((a) => `
     <tr><td colspan="2" style="padding-top:10px"><select data-aho="${a.id}" data-k="activo" aria-label="Destino">${S.cartera.activos.map((x) => `<option value="${x.id}" ${x.id === a.id ? "selected" : ""}>${esc(x.nombre)}</option>`).join("")}</select></td></tr>
     <tr><td style="width:45%">${a.resto ? `<span class="muted">Recibe el resto</span>` : `<input data-aho="${a.id}" data-k="importe" inputmode="decimal" value="${numTxt(a.importe)}" aria-label="Importe">`}</td>
       <td><select data-aho="${a.id}" data-k="tipo" aria-label="Tipo"><option value="inversion" ${a.tipo === "inversion" ? "selected" : ""}>Inversión</option><option value="ahorro" ${a.tipo === "ahorro" ? "selected" : ""}>Ahorro</option></select></td></tr>`).join("");
@@ -2145,7 +2160,7 @@ document.addEventListener("click", (e) => {
   if (t.id === "futDevolver") return devolverSobrante();
   if (d.futpagar) { e.stopPropagation(); return hojaPagarFuturo(futuro(d.futpagar)); }
   if (d.fut) return hojaFuturo(futuro(d.fut));
-  if (d.futorig) { S.config.futurosOrigen = d.futorig; sincronizarFuturosMes(); save(); render(); return toast(d.futorig === "ahorro" ? "Saldrá de tu ahorro mensual" : "Saldrá de tu dinero personal"); }
+  if (d.futorig) { S.config.futurosOrigen = d.futorig; sincronizarFuturosMes(); save(); render(); return toast(d.futorig === "necesidades" ? "Saldrá de tu presupuesto de necesidades" : "Saldrá de tu dinero personal"); }
   if (t.id === "heroNum") return hojaDesglose("total");
   if (t.id === "btnPriv") return togglePrivado();
   if (t.id === "btnImportar") return hojaImportar();
@@ -2369,7 +2384,7 @@ function datosParaIA() {
     patrimonio: { neto: foto().total, deudas: totalDeudas(), total: r2(saldoCuenta() + c.valor + totalMetas()), fondoEmergencia: c.liquidez, inversiones: c.invValor, aportado: c.invAportado, ganancia: c.invGanancia, rentabilidadAnualPct: c.tir == null ? null : r2(c.tir * 100),
       activos: c.items.map((x) => ({ nombre: x.a.nombre, tipo: x.a.clase, ticker: x.a.ticker || undefined, titulos: x.titulos || undefined, valor: x.valor, aportado: x.aportado, ganancia: x.ganancia, rentabilidadAnualPct: x.tir == null ? null : r2(x.tir * 100), pesoObjetivoPct: r2((x.a.objetivo || 0) * 100) })) },
     jubilacion: { inversionMensualActual: pj.aport, capitalInvertido: pj.capital, escenarios: pj.escenarios.map((e) => ({ escenario: e.n, rentabilidadPct: r2(e.r * 100), necesario: e.necesario, proyectado: e.proyectado, coberturaPct: r2(e.cobertura * 100), inversionMensualNecesaria: e.cuota })) },
-    gastosPrevistos: (() => { const P = planFuturos(); return { cuotaMensual: P.cuota, apartadoTotal: P.hucha, apartadoEsteMes: P.esteMes, faltaEsteMes: P.faltaEsteMes, aportarHasta: P.hasta, saleDe: S.config.futurosOrigen === "personal" ? "dinero personal" : "ahorro mensual",
+    gastosPrevistos: (() => { const P = planFuturos(); return { cuotaMensual: P.cuota, apartadoTotal: P.hucha, apartadoEsteMes: P.esteMes, faltaEsteMes: P.faltaEsteMes, aportarHasta: P.hasta, saleDe: S.config.futurosOrigen === "personal" ? "dinero personal" : "presupuesto de necesidades (el ahorro no se toca)",
       pendientes: P.pend.map((f, i) => ({ nombre: f.nombre, importe: f.importe, paraMes: f.mes, momento: f.cuando === "final" ? "final de mes" : "principios de mes", asignado: P.asig[i], mesesParaApartar: P.meses[i] })),
       planMesAMes: P.filas.map((x) => ({ mes: x.m, apartar: x.total, reparto: x.partes.map((p) => p.f.nombre + ": " + p.a), pagos: x.pagos.map((f) => f.nombre) })),
       pagados: (S.futuros || []).filter((f) => f.pagado).map((f) => ({ nombre: f.nombre, previsto: f.importe, pagado: f.pagado.importe, fecha: f.pagado.fecha })) }; })(),
@@ -2384,7 +2399,7 @@ function datosParaIA() {
 }
 const INSTRUCCIONES_IA = "Eres el asesor financiero personal de esta persona, que vive en España. Tienes todos sus datos financieros en JSON. " +
   "Responde en español claro y cercano, con cifras concretas de sus datos, y termina con 2-3 acciones concretas. " +
-  "Ten en cuenta sus reglas (50 % necesidades, ahorro fijo, fondo de emergencia antes de invertir más, deudas por debajo del 35 %), sus proyectos y su plan de jubilación. " +
+  "Ten en cuenta sus reglas (50 % necesidades, que también cubren los gastos previstos como la renta o reformas; ahorro intocable: mínimo el 20 % de la nómina más sus aportaciones fijas a inversión; fondo de emergencia antes de invertir más; deudas por debajo del 35 %), sus proyectos y su plan de jubilación. " +
   "Si una decisión tiene riesgos, explícalos. No recomiendes productos financieros concretos ni prometas rentabilidades; recuerda que no eres un asesor financiero regulado cuando sea relevante.";
 const promptMes = () => INSTRUCCIONES_IA + "\n\nTarea: analiza su mes actual: qué va bien, dónde se está pasando o perdiendo dinero, cómo van sus inversiones y proyectos, y qué debería hacer el mes que viene.\n\nDATOS:\n" + JSON.stringify(datosParaIA(), null, 1);
 function promptChat(q) {
@@ -2396,8 +2411,8 @@ function analisisLocal() {
   L.push("Resumen de " + mesLabel(m) + "\n");
   if (r.base) {
     L.push("Nómina de " + eur(r.base) + (r.otrosIngresos ? " y " + eur(r.otrosIngresos) + " de otros ingresos" : "") + ".");
-    L.push("Necesidades: " + eur(r.gastoNec) + " de " + eur(r.rep.necesidades) + (r.gastoNec > r.rep.necesidades ? ", te pasas " + eur(r.gastoNec - r.rep.necesidades) : "") + ".");
-    L.push("Personal: " + eur(r.gastoPer) + " de " + eur(r.presupuestoPersonal) + (r.gastoPer > r.presupuestoPersonal ? ", te pasas " + eur(r.gastoPer - r.presupuestoPersonal) : ", te quedan " + eur(r.presupuestoPersonal - r.gastoPer)) + ".");
+    L.push("Necesidades: " + eur(r.necUsado) + " de " + eur(r.rep.necesidades) + (r.necUsado > r.rep.necesidades ? ", te pasas " + eur(r.necUsado - r.rep.necesidades) : "") + ".");
+    L.push("Personal: " + eur(r.perUsado) + " de " + eur(r.presupuestoPersonal) + (r.perUsado > r.presupuestoPersonal ? ", te pasas " + eur(r.perUsado - r.presupuestoPersonal) : ", te quedan " + eur(r.presupuestoPersonal - r.perUsado)) + ".");
     L.push("Ahorro e inversión: " + eur(r.ahorroNeto) + " de " + eur(r.rep.ahorroTotal) + ".");
   } else L.push("Aún no has registrado la nómina de este mes.");
   L.push("Inversiones: " + eur(c.invValor) + (c.invAportado ? ", ganancia " + sEur(c.invGanancia) + " (" + sPct(c.invGanancia / c.invAportado) + ")" : "") + (c.tir != null ? ", " + sPct(c.tir) + " al año" : "") + ".");
@@ -2409,7 +2424,7 @@ function analisisLocal() {
   L.push("\nQué haría:");
   const acc = [];
   if (bt.neto < -1) acc.push("Revisa con la empresa las diferencias de cobro (" + sEur(bt.neto) + "): es dinero sin riesgo.");
-  if (r.base && r.gastoPer > r.presupuestoPersonal) acc.push("Fija un tope semanal de " + eur(r.presupuestoPersonal / 4.3) + " para tus gastos personales.");
+  if (r.base && r.perUsado > r.presupuestoPersonal) acc.push("Fija un tope semanal de " + eur(r.presupuestoPersonal / 4.3) + " para tus gastos personales.");
   if (r.base && r.ahorroNeto < r.rep.ahorroTotal) acc.push("Haz las transferencias de ahorro nada más cobrar.");
   if (c.liquidez < cfg.fondoObjetivo) acc.push("Sigue llenando el fondo de emergencia: faltan " + eur(cfg.fondoObjetivo - c.liquidez) + ".");
   if (pj.escenarios[1].cobertura < 1) acc.push("Para tu jubilación, sube la inversión mensual hacia " + eur0(pj.escenarios[1].cuota) + " cuando puedas.");
@@ -2422,7 +2437,7 @@ function respuestaLocal(q) {
   const n = (q.match(/(\d[\d.]*,?\d*)\s*(€|euros?)?/) || [])[1];
   const cantidad = n ? parseImporte(n) : null, m = hoy().slice(0, 7), r = resumenMes(m), c = calcCartera();
   if (cantidad && /permit|comprar|gastar|puedo/i.test(q)) {
-    const libre = r2(r.presupuestoPersonal - r.gastoPer), disponible = r2(saldoCuenta() - r.pendienteTotal), sobreFondo = r2(c.liquidez - S.config.fondoObjetivo);
+    const libre = r2(r.presupuestoPersonal - r.perUsado), disponible = r2(saldoCuenta() - r.pendienteTotal), sobreFondo = r2(c.liquidez - S.config.fondoObjetivo);
     const L = ["Para gastar " + eur(cantidad) + ":"];
     L.push("• Te quedan " + eur(Math.max(0, libre)) + " de dinero personal este mes.");
     L.push("• En la cuenta, tras los pagos pendientes, tendrías " + eur(disponible) + ".");
@@ -2542,16 +2557,16 @@ function iniciarSync() {
 
 /* ---------- CATEGORÍAS DE GASTO ---------- */
 const CATEGORIAS_BASE = [
-  { id: "vivienda", n: "Vivienda", g: "necesidades", k: ["hipoteca", "alquiler", "comunidad", "ibi", "reforma", "muebles"] },
+  { id: "vivienda", n: "Vivienda", g: "necesidades", k: ["hipoteca", "alquiler", "comunidad", "ibi", "reforma", "muebles", "mantenimiento", "fontanero", "electricista", "ferreteria", "reparacion", "cerrajero", "pintura", "leroy", "bricomart", "brico depot", "bauhaus"] },
   { id: "suministros", n: "Suministros", g: "necesidades", k: ["luz", "agua", "gas natural", "internet", "fibra", "movil", "alarma", "iberdrola", "endesa", "naturgy", "movistar", "vodafone", "orange", "digi", "securitas", "aguas", "electricidad", "butano"] },
   { id: "super", n: "Supermercado", g: "necesidades", k: ["mercadona", "lidl", "carrefour", "dia ", "aldi", "eroski", "consum", "alcampo", "hipercor", "supermercado", "super ", "fruteria", "carniceria", "panaderia"] },
   { id: "transporte", n: "Transporte y coche", g: "necesidades", k: ["gasolina", "gasoil", "gasolinera", "diesel", "repsol", "cepsa", "galp", "shell", "bp ", "ballenoil", "plenoil", "parking", "peaje", "taller", "itv", "neumatico", "renfe", "metro", "autobus", "taxi", "cabify"] },
   { id: "salud", n: "Seguros y salud", g: "necesidades", k: ["seguro", "dkv", "sanitas", "mapfre", "adeslas", "asisa", "farmacia", "medico", "dentista", "psicolog", "optica", "fisio", "clinica"] },
   { id: "prestamos", n: "Préstamos", g: "necesidades", k: ["prestamo", "financiacion", "recibo cuota"] },
   { id: "comer", n: "Comer fuera", g: "personal", k: ["restaurante", "bar ", "cafe", "cafeteria", "desayuno", "almuerzo", "cena", "burger", "mcdonald", "telepizza", "domino", "glovo", "just eat", "uber eats", "kfc", "taberna", "cerveceria", "pizzeria", "kebab"] },
-  { id: "compras", n: "Compras", g: "personal", k: ["amazon", "amzn", "zara", "decathlon", "ikea", "corte ingles", "aliexpress", "shein", "primark", "mediamarkt", "leroy", "bricomart", "pull&bear", "temu"] },
+  { id: "compras", n: "Compras", g: "personal", k: ["amazon", "amzn", "zara", "decathlon", "ikea", "corte ingles", "aliexpress", "shein", "primark", "mediamarkt", "pull&bear", "temu", "ropa", "calzado", "mango", "bershka", "h&m", "springfield", "kiabi"] },
   { id: "suscripciones", n: "Suscripciones", g: "personal", k: ["netflix", "hbo", "spotify", "icloud", "apple.com", "chatgpt", "openai", "disney", "prime video", "amazon prime", "youtube", "gimnasio", "gym", "dazn", "movistar+", "claude"] },
-  { id: "ocio", n: "Ocio y viajes", g: "personal", k: ["cine", "viaje", "hotel", "booking", "airbnb", "ryanair", "vueling", "iberia", "entradas", "concierto", "teatro", "loteria"] },
+  { id: "ocio", n: "Ocio y viajes", g: "personal", k: ["cine", "viaje", "hotel", "booking", "airbnb", "ryanair", "vueling", "iberia", "entradas", "concierto", "teatro", "loteria", "evento", "fiesta", "boda", "discoteca", "pub "] },
   { id: "tabaco", n: "Estanco", g: "personal", k: ["estanco", "tabaco"] },
   { id: "efectivo", n: "Efectivo (cajero)", g: "personal", k: ["cajero", "reintegro", "retirada efectivo", "disposicion efectivo"] },
   { id: "donaciones", n: "Donaciones", g: "personal", k: ["aldeas", "ong", "cruz roja", "unicef", "caritas", "donacion"] },
@@ -2931,7 +2946,7 @@ function informeHTML() {
       ${c.invAportado ? `<div style="font-size:13px;color:#a39d91">Inversiones: ${eur0(c.invValor)} (${sEur(c.invGanancia)})</div>` : ""}
     </div>
     <h3 style="margin:22px 0 6px">Este mes</h3><table style="width:100%;border-collapse:collapse;font-size:14px">
-      ${fila("Ingresado", eur(r.ingresos))}${fila("Gastado", eur(r.gastos))}${fila("Ahorrado e invertido", eur(r.ahorroNeto) + (r.rep.ahorroTotal ? " de " + eur0(r.rep.ahorroTotal) : ""))}${fila("Libre para ti", eur(r.presupuestoPersonal - r.gastoPer))}${fila("Cuenta corriente", eur(f.cuenta))}</table>
+      ${fila("Ingresado", eur(r.ingresos))}${fila("Gastado", eur(r.gastos))}${fila("Ahorrado e invertido", eur(r.ahorroNeto) + (r.rep.ahorroTotal ? " de " + eur0(r.rep.ahorroTotal) : ""))}${fila("Libre para ti", eur(r.presupuestoPersonal - r.perUsado))}${fila("Cuenta corriente", eur(f.cuenta))}</table>
     ${av.length ? `<h3 style="margin:22px 0 6px">Lo que necesita tu atención</h3><ul style="padding-left:18px;font-size:14px;line-height:1.5">${av.map((a) => `<li>${esc(a.t)}</li>`).join("")}</ul>` : ""}
     ${(() => { const P = planFuturos(); return P.pend.length ? `<h3 style="margin:22px 0 6px">Gastos previstos</h3><p style="font-size:14px;margin:0 0 6px">Aparta <b>${eur0(P.cuota)}</b> al mes${P.hasta ? " hasta " + mesLabel(P.hasta) : ""}. ${P.faltaEsteMes > 0 ? "Este mes te faltan " + eur0(P.faltaEsteMes) + "." : "Este mes vas al día."}</p><table style="width:100%;border-collapse:collapse;font-size:14px">${P.pend.map((f, i) => fila(esc(f.nombre) + " · " + mesLabel(f.mes), eur0(P.asig[i]) + " de " + eur0(f.importe))).join("")}</table>` : ""; })()}
     ${proy ? `<h3 style="margin:22px 0 6px">Proyectos</h3><table style="width:100%;border-collapse:collapse;font-size:14px">${proy}</table>` : ""}
@@ -3051,7 +3066,7 @@ function capacidadFuturos(cuota) {
   const mHoy = hoy().slice(0, 7), nom = S.movimientos.filter((x) => x.tipo === "nomina").map((x) => x.fecha.slice(0, 7)).sort();
   const base = resumenMes(mHoy).base || (nom.length ? resumenMes(nom[nom.length - 1]).base : 0) || S.config.umbral;
   const sin = calcularReparto(base, S.config, 0), con = calcularReparto(base, S.config, cuota);
-  return { base, sin, con, origen: S.config.futurosOrigen || "ahorro" };
+  return { base, sin, con, origen: S.config.futurosOrigen === "personal" ? "personal" : "necesidades" };
 }
 /* Mantiene la línea "Apartar para gastos previstos" del mes actual al día */
 function sincronizarFuturosMes() {
@@ -3075,7 +3090,8 @@ function avisosFuturos() {
   });
   const r = resumenMes(mHoy);
   if (P.cuota > 0 && r.base && !(S.meses[mHoy] || {}).cerrado) {
-    if (r.rep.futuroFalta > 0) out.push({ n: "crit", t: "Tus gastos previstos piden " + eur0(P.cuota) + " al mes y tu nómina solo da para " + eur0(r.rep.futuro) + ". Revisa importes o fechas.", go: "proyectos" });
+    if (r.rep.futuroFalta > 0) out.push({ n: "crit", t: "Tus gastos previstos piden " + eur0(P.cuota) + " al mes y tu dinero personal solo da para " + eur0(r.rep.futuro) + ". Revisa importes o fechas.", go: "proyectos" });
+    else if (r.rep.futuroOrigen === "necesidades" && r.rep.necLibre < 0) out.push({ n: "crit", t: "Pagos fijos + gastos previstos superan tu presupuesto de necesidades en " + eur0(-r.rep.necLibre) + " al mes.", go: "proyectos" });
     else if (P.faltaEsteMes > 0 && Number(hoy().slice(8, 10)) >= 10) out.push({ n: "warn", t: "Este mes te quedan " + eur(P.faltaEsteMes) + " por apartar para tus gastos previstos.", go: "proyectos" });
   }
   if (P.sobrante > 1 && !P.pend.length) out.push({ n: "info", t: "Te sobran " + eur(P.sobrante) + " en la hucha de gastos previstos. Puedes devolverlos a la cuenta.", go: "proyectos" });
@@ -3096,14 +3112,15 @@ function futItem(f, i, P, compacto) {
 function textoCapacidad(P) {
   if (!P.cuota) return "";
   const k = capacidadFuturos(P.cuota), mesFin = P.hasta ? mesNombre(P.hasta) + (P.hasta.slice(0, 4) !== hoy().slice(0, 4) ? " de " + P.hasta.slice(0, 4) : "") : "";
-  const invSin = k.sin.ahorroTotal - (k.sin.items.find((x) => x.resto) || { importe: 0 }).importe;
-  let t;
-  if (k.con.futuroFalta > 0) t = `<div class="note crit"><span class="ico">!</span><span>Con una nómina de ${eur0(k.base)} solo puedes apartar ${eur0(k.con.futuro)} al mes. Faltarían ${eur0(k.con.futuroFalta)}: retrasa alguna fecha o baja algún importe.</span></div>`;
-  else if (k.origen === "ahorro") {
-    const restoAho = r2(k.con.ahorroTotal - k.con.futuro - k.con.futuroDePersonal);
-    t = `<div class="muted">Sale de tu ahorro mensual de ${eur0(k.sin.ahorroTotal)}: hasta ${mesFin}, ${eur0(restoAho)} seguirán yendo a tus inversiones y ahorro${k.con.inversion < invSin - 0.5 ? " (tus inversiones fijas bajan de " + eur0(invSin) + " a " + eur0(k.con.inversion) + ")" : ""}${k.con.futuroDePersonal > 0 ? ", y " + eur0(k.con.futuroDePersonal) + " saldrán de tu dinero personal" : ""}.</div>`;
-  } else t = `<div class="muted">Sale de tu dinero personal: hasta ${mesFin} te quedarán ${eur0(k.con.personal)} al mes para ti en lugar de ${eur0(k.sin.personal)}${k.con.futuroDeAhorro > 0 ? ", y " + eur0(k.con.futuroDeAhorro) + " saldrán de tu ahorro" : ""}.${k.con.personal < S.config.minimoPersonal ? " Queda por debajo de tu mínimo de " + eur0(S.config.minimoPersonal) + "." : ""}</div>`;
-  return t;
+  const base = `Tu ahorro (${eur0(k.con.ahorroTotal)} al mes) no se toca.`;
+  if (k.origen === "necesidades") {
+    const t = `${base} Sale de tus necesidades (${eur0(k.con.necesidades)}): ${eur0(k.con.necFijos)} en pagos fijos y ${eur0(k.con.futuro)} para estos gastos. Hasta ${mesFin} te quedan <b>${eur0(k.con.necLibre)}</b> para comida, gasoil y demás necesidades.`;
+    if (k.con.necLibre < 0) return `<div class="note crit"><span class="ico">!</span><span>${t} No llega: lo que falte saldrá de tu dinero personal. Retrasa alguna fecha o baja algún importe.</span></div>`;
+    if (k.con.necLibre < 300) return `<div class="note warn"><span class="ico">!</span><span>${t} Va justo: vigila esos gastos o tira de tu dinero personal.</span></div>`;
+    return `<div class="muted">${t}</div>`;
+  }
+  if (k.con.futuroFalta > 0) return `<div class="note crit"><span class="ico">!</span><span>${base} Tu dinero personal (${eur0(k.sin.personal)}) no llega para apartar ${eur0(P.cuota)} al mes. Retrasa alguna fecha o baja algún importe.</span></div>`;
+  return `<div class="muted">${base} Sale de tu dinero personal: hasta ${mesFin} te quedarán ${eur0(k.con.personal)} al mes para ti en lugar de ${eur0(k.sin.personal)}.${k.con.personal < S.config.minimoPersonal ? " Queda por debajo de tu mínimo de " + eur0(S.config.minimoPersonal) + "." : ""}</div>`;
 }
 function renderFuturos() {
   const el = $("#futuros"); if (!el) return;
@@ -3115,7 +3132,7 @@ function renderFuturos() {
       ${pagados.length ? `<details style="margin-top:14px"><summary class="muted">Pagados (${pagados.length})</summary><ul class="rows">${pagados.map(filaPagado).join("")}</ul></details>` : ""}`;
     return;
   }
-  const origen = S.config.futurosOrigen || "ahorro", hecho = P.esteMes >= P.cuota - 0.5;
+  const origen = S.config.futurosOrigen === "personal" ? "personal" : "necesidades", hecho = P.esteMes >= P.cuota - 0.5;
   const verdict = P.cuota <= 0 ? `<div class="verdict good">Ya tienes <b>todo apartado</b>. Solo queda pagar cuando toque.</div>`
     : hecho ? `<div class="verdict good">Este mes ya has apartado <b>${eur0(P.esteMes)}</b>. Vas al día.</div>`
     : `<div class="verdict">Este mes llevas <b>${eur0(P.esteMes)}</b> de ${eur0(P.cuota)}. Te quedan <b>${eur0(P.faltaEsteMes)}</b> por apartar.</div>`;
@@ -3144,7 +3161,7 @@ function renderFuturos() {
     <div class="stats">${stat("Aparta cada mes", eur0(P.cuota), P.hasta ? "hasta " + mesLabel(P.hasta) : "")}${stat("Llevas apartado", eur0(P.hucha), "de " + eur0(P.necesario))}</div>
     <div style="margin-top:12px">${verdict}</div>
     <div class="btns" style="margin:4px 0 12px">${P.faltaEsteMes > 0 ? `<button class="btn sm gold" id="futApartar">Apartar ${eur0(P.faltaEsteMes)} ahora</button>` : `<button class="btn sm" id="futApartar">Apartar dinero</button>`}<button class="btn sm" id="nuevoFut">Añadir gasto previsto</button></div>
-    <div class="seg" style="margin-bottom:8px"><button data-futorig="ahorro" class="${origen === "ahorro" ? "on" : ""}">Sale de mi ahorro</button><button data-futorig="personal" class="${origen === "personal" ? "on" : ""}">Sale de mi dinero personal</button></div>
+    <div class="seg" style="margin-bottom:8px"><button data-futorig="necesidades" class="${origen === "necesidades" ? "on" : ""}">Sale de necesidades</button><button data-futorig="personal" class="${origen === "personal" ? "on" : ""}">Sale de mi dinero personal</button></div>
     ${textoCapacidad(P)}
     <h3 style="margin:20px 0 4px">Tus gastos previstos</h3>
     <div>${P.pend.map((f, i) => futItem(f, i, P)).join("")}</div>
@@ -3266,6 +3283,101 @@ function devolverSobrante() {
   S.movimientos.push({ id: uid(), fecha: hoy(), concepto: "Sobrante de gastos previstos", importe: P.sobrante, tipo: "uso", cat: "futuro" });
   save(); render(); toast("Devuelto a la cuenta");
 }
+
+/* ---------- 15d. TU REPARTO DE LA NÓMINA (editor) ---------- */
+let _rpForce = false;
+function nominaReferencia() {
+  const nom = S.movimientos.filter((x) => x.tipo === "nomina").map((x) => x.fecha.slice(0, 7)).sort();
+  return (nom.length ? resumenMes(nom[nom.length - 1]).base : 0) || S.config.umbral || 3000;
+}
+function renderRepartoCfg() {
+  const el = $("#repartoCfg"); if (!el) return;
+  if (!_rpForce && el.contains(document.activeElement) && document.activeElement.tagName === "INPUT") return;
+  _rpForce = false;
+  const c = S.config, modo = c.repartoModo === "porcentajes" ? "porcentajes" : "reglas";
+  const base = nominaReferencia(), rep = calcularReparto(base, c, futMes(hoy().slice(0, 7)));
+  const pctDe = (v) => base ? numTxt(Math.round(v / base * 1000) / 10) + " %" : "";
+  const resto = c.repartoAhorro.find((x) => x.resto);
+  const lineas = c.repartoAhorro.filter((x) => !x.resto);
+  const opcAct = (sel) => S.cartera.activos.map((x) => `<option value="${x.id}" ${x.id === sel ? "selected" : ""}>${esc(x.nombre)}</option>`).join("");
+  const imp = (id) => (rep.items.find((i) => i.id === id) || { importe: 0 }).importe;
+  const fila = (titulo, desc, campo, valor) => `<div class="rp-row"><div class="rp-t"><b>${titulo}</b><span>${desc}</span></div>${campo}<div class="rp-v num">${valor}</div></div>`;
+  const pctInput = (k) => `<div class="rp-in"><input data-cfg="${k}" data-pct inputmode="decimal" value="${numTxt(c[k] * 100)}" aria-label="Porcentaje"><span>%</span></div>`;
+
+  let h = `<div class="seg" style="margin-bottom:16px"><button data-rpmodo="porcentajes" class="${modo === "porcentajes" ? "on" : ""}">Mis porcentajes</button><button data-rpmodo="reglas" class="${modo === "reglas" ? "on" : ""}">Reglas automáticas</button></div>`;
+  if (modo === "porcentajes") {
+    h += fila("Necesidades", "Gastos de casa: hipoteca, préstamos, luz, agua, alarma, seguros, combustible, farmacia, mantenimiento…" + (rep.futuro > 0 && rep.futuroOrigen === "necesidades" ? " También lo que apartas para gastos previstos." : ""), pctInput("necesidadesPct"), eur(rep.necesidades))
+      + fila("Ahorro", "Va a " + esc(resto ? resto.nombre : "tu cuenta de ahorro") + ". Intocable.", pctInput("ahorroMinPct"), eur(resto ? imp(resto.id) : rep.ahorro));
+  } else {
+    h += `<div class="panel" style="margin-bottom:14px">
+      <div class="row"><div><label>Necesidades (% del sueldo)</label><input data-cfg="necesidadesPct" data-pct inputmode="decimal" value="${numTxt(c.necesidadesPct * 100)}"></div><div><label>Ahorro mínimo (%)</label><input data-cfg="ahorroMinPct" data-pct inputmode="decimal" value="${numTxt(c.ahorroMinPct * 100)}"></div></div>
+      <div class="row"><div><label>Ahorro fijo (€/mes)</label><input data-cfg="ahorroFijo" inputmode="decimal" value="${numTxt(c.ahorroFijo)}"></div><div><label>A partir de un sueldo de (€)</label><input data-cfg="umbral" inputmode="decimal" value="${numTxt(c.umbral)}"></div></div>
+      <div class="muted">Con nómina igual o mayor que ${eur0(c.umbral)}, ahorras ${eur0(c.ahorroFijo)} fijos. Por debajo, ajusta. El ahorro nunca baja del ${numTxt(c.ahorroMinPct * 100)} % más tus aportaciones fijas.</div></div>`;
+  }
+  h += `<h3 style="margin:18px 0 6px">Aportaciones fijas</h3><div class="muted" style="margin-bottom:6px">Cada una en euros o en % de la nómina. Se suman al ahorro.</div>`
+    + lineas.map((a) => `<div class="rp-row rp-dest">
+        <div class="rp-t"><select data-rp="${a.id}" data-k="activo" aria-label="Destino">${opcAct(a.id)}</select>
+          <select data-rp="${a.id}" data-k="tipo" aria-label="Tipo" class="rp-mini"><option value="inversion" ${a.tipo === "inversion" ? "selected" : ""}>Inversión</option><option value="ahorro" ${a.tipo === "ahorro" ? "selected" : ""}>Ahorro</option></select></div>
+        <div class="rp-in"><input data-rp="${a.id}" data-k="cantidad" inputmode="decimal" value="${a.unidad === "pct" ? numTxt((a.pct || 0) * 100) : numTxt(a.importe)}" aria-label="Cantidad">
+          <select data-rp="${a.id}" data-k="unidad" aria-label="Unidad"><option value="eur" ${a.unidad !== "pct" ? "selected" : ""}>€</option><option value="pct" ${a.unidad === "pct" ? "selected" : ""}>%</option></select></div>
+        <div class="rp-v num">${eur(imp(a.id))}<button class="x" data-rpdel="${a.id}" aria-label="Quitar">×</button></div></div>`).join("")
+    + `<button class="btn sm" data-rpadd="1" style="margin:10px 0 4px">Añadir aportación</button>`;
+  if (modo === "reglas") h += fila("Lo que sobra del ahorro", "Va a la cuenta que elijas.", `<div class="rp-in"><select data-rp="${resto ? resto.id : ""}" data-k="activo" aria-label="Destino">${opcAct(resto ? resto.id : "")}</select></div>`, eur(resto ? imp(resto.id) : 0));
+  else h += `<div class="field" style="margin-top:10px"><label>El ahorro va a</label><select data-rp="${resto ? resto.id : ""}" data-k="activo">${opcAct(resto ? resto.id : "")}</select></div>`;
+  const pers = rep.personal, bajo = pers < c.minimoPersonal;
+  h += `<div class="rp-row rp-total"><div class="rp-t"><b>Personal</b><span>Lo que queda: salidas, ropa, restaurantes, eventos…${rep.futuro > 0 && rep.futuroOrigen === "personal" ? " Ya descontado lo que apartas para gastos previstos." : ""}</span></div><div class="rp-in"><span class="muted">${pctDe(pers)}</span></div><div class="rp-v num" style="color:${pers < 0 ? "var(--crit)" : bajo ? "var(--warn)" : "var(--text)"}">${eur(pers)}</div></div>`;
+  const tot = rep.necesidades + rep.ahorroTotal + Math.max(0, pers);
+  const parts = [["Necesidades", rep.necesidades, "--c1"], ["Personal", Math.max(0, pers), "--c2"], ["Ahorro", rep.ahorro, "--c3"], ["Inversión", rep.inversion, "--c4"]].filter((x) => x[1] > 0);
+  h += `<div class="compo" style="margin:16px 0 8px;height:8px">${parts.map((x) => `<span style="flex:${x[1] / tot};background:${col(x[2])}" data-tip="${x[0]}: ${eur(x[1])}"></span>`).join("")}</div>
+    <div class="muted">Calculado con tu última nómina de ${eur(base)}.${rep.necesidades + rep.ahorroTotal > base + 0.5 ? " " : ""}</div>
+    ${pers <= 0 ? `<div class="note crit" style="margin-top:10px"><span class="ico">!</span><span>No te queda nada para gastos personales: los porcentajes suman más del 100 %. Baja alguno.</span></div>` : bajo ? `<div class="note warn" style="margin-top:10px"><span class="ico">!</span><span>Te quedan ${eur0(pers)} para ti, por debajo de tu mínimo de ${eur0(c.minimoPersonal)}.</span></div>` : ""}
+    <div class="row" style="margin-top:14px"><div><label>Mínimo para ti (aviso, €)</label><input data-cfg="minimoPersonal" inputmode="decimal" value="${numTxt(c.minimoPersonal)}"></div><div></div></div>
+    <div class="muted" style="margin-top:6px">Los cambios se aplican a los pagos pendientes de este mes y a las próximas nóminas. Los meses pasados no cambian.</div>`;
+  el.innerHTML = h;
+}
+function aplicarCambioReparto() {
+  const m = hoy().slice(0, 7), info = S.meses[m];
+  if (info && !info.cerrado && resumenMes(m).base > 0) rehacerMes(m);
+}
+document.addEventListener("change", (e) => {
+  const t = e.target, d = t.dataset;
+  if (!d.rp && !(d.cfg && t.closest("#repartoCfg"))) return;
+  if (d.rp) {
+    const a = S.config.repartoAhorro.find((x) => x.id === d.rp); if (!a) return;
+    if (d.k === "activo") {
+      if (S.config.repartoAhorro.some((x) => x.id === t.value && x !== a)) { toast("Esa cuenta ya tiene una línea"); return render(); }
+      a.id = t.value; a.nombre = activo(t.value).nombre;
+    } else if (d.k === "unidad") {
+      const base = nominaReferencia();
+      if (t.value === "pct" && a.unidad !== "pct") { a.unidad = "pct"; a.pct = base ? Math.round(a.importe / base * 10000) / 10000 : 0; }
+      else if (t.value === "eur" && a.unidad === "pct") { a.unidad = "eur"; a.importe = r2(base * (a.pct || 0)); }
+    } else if (d.k === "cantidad") {
+      const v = parseImporte(t.value); if (isNaN(v) || v < 0) { toast("Número no válido"); return render(); }
+      if (a.unidad === "pct") a.pct = v / 100; else a.importe = r2(v);
+    } else a[d.k] = t.value;
+  }
+  // (data-cfg ya lo guarda el manejador general; aquí solo rehacemos el mes)
+  setTimeout(() => { aplicarCambioReparto(); save(); _rpForce = true; render(); }, 0);
+});
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("[data-rpmodo],[data-rpadd],[data-rpdel]"); if (!t) return;
+  const d = t.dataset;
+  if (d.rpmodo) {
+    if (d.rpmodo === S.config.repartoModo) return;
+    S.config.repartoModo = d.rpmodo;
+    toast(d.rpmodo === "porcentajes" ? "Ahora mandan tus porcentajes" : "Vuelven las reglas automáticas");
+  } else if (d.rpadd) {
+    const libre = S.cartera.activos.find((x) => !S.config.repartoAhorro.some((y) => y.id === x.id));
+    if (!libre) return toast("Todas tus cuentas ya tienen línea. Crea otra en Patrimonio → Añadir activo.");
+    const i = S.config.repartoAhorro.findIndex((x) => x.resto);
+    S.config.repartoAhorro.splice(i < 0 ? S.config.repartoAhorro.length : i, 0, { id: libre.id, nombre: libre.nombre, importe: 0, tipo: libre.clase === "Liquidez" ? "ahorro" : "inversion", unidad: "eur" });
+  } else if (d.rpdel) {
+    const a = S.config.repartoAhorro.find((x) => x.id === d.rpdel);
+    if (!a || !confirm("¿Quitar la aportación a " + a.nombre + "?")) return;
+    S.config.repartoAhorro = S.config.repartoAhorro.filter((x) => x !== a);
+  }
+  aplicarCambioReparto(); save(); render();
+});
 
 /* ---------- 16. TOOLTIP ---------- */
 const tip = $("#tip");
