@@ -420,7 +420,7 @@ body.privado .hero-num,body.privado .hero-sub b,body.privado .stat .v,body.priva
     <section class="block"><h2>Presupuesto y gasto real</h2><div id="meters"></div></section>
     <section class="block"><h2>Ritmo de gasto del mes</h2><div id="ritmo"></div></section>
     <section class="block"><h2>Gasto por categoría</h2><div id="cats"></div></section>
-    <section class="block"><h2>Pagos y transferencias del mes</h2><div class="muted" style="margin:-4px 0 6px">Márcalos cuando los hagas. Puedes ajustar el importe antes.</div><ul class="rows" id="pendientes"></ul></section>
+    <section class="block"><h2>Pagos y transferencias del mes</h2><div class="muted" style="margin:-4px 0 6px">Márcalos cuando los hagas. Puedes ajustar el importe antes.</div><div id="repetidos"></div><ul class="rows" id="pendientes"></ul></section>
     <section class="block"><div class="block-h"><h2>Movimientos</h2><button class="link" id="addMov">Añadir</button></div><ul class="rows" id="movs"></ul></section>
     <section class="block"><h2>Ahorro de los últimos 6 meses</h2><div id="hist"></div></section>
     <section class="block"><h2>Tu plan de ahorro acumulado</h2><div id="planAhorro"></div></section>
@@ -1165,7 +1165,12 @@ function marcarPendiente(m, id, importe) {
     const mov = { id: uid(), fecha: fechaMovEnMes(m), concepto: p.concepto, importe, tipo: p.tipo, cat: p.tipo === "gasto" || p.cat === "futuro" ? p.cat : p.tipo, pendiente: p.id };
     if (p.activoId) mov.activoId = p.activoId;
     S.movimientos.push(mov); p.movId = mov.id;
-  } else { S.movimientos = S.movimientos.filter((x) => x.id !== p.movId); p.hecho = false; delete p.movId; }
+  } else {
+    const mv = S.movimientos.find((x) => x.id === p.movId);
+    if (mv && mv.importado) delete mv.pendiente;   // el del banco no se borra: solo se desenlaza
+    else S.movimientos = S.movimientos.filter((x) => x.id !== p.movId);
+    p.hecho = false; delete p.movId;
+  }
   save(); render();
 }
 function quitarMovimiento(id) {
@@ -1462,7 +1467,7 @@ function renderInicio() {
     : `<div class="sub">Aún no hay movimientos este mes. Empieza registrando tu nómina.</div><button class="btn sm" data-go="mes" style="margin-top:12px">Registrar nómina</button>`;
 
   const av = avisos(m);
-  $("#iAvisos").innerHTML = av.length ? av.slice(0, 5).map((a) => `<div class="note ${a.n} ${a.go || a.proy ? "click" : ""}" ${a.go ? `data-go="${a.go}"` : ""} ${a.proy ? `data-proy="${a.proy}"` : ""} style="cursor:${a.go || a.proy ? "pointer" : "default"}"><span class="ico">${ICO[a.n]}</span><span>${esc(a.t)}</span></div>`).join("")
+  $("#iAvisos").innerHTML = av.length ? av.slice(0, 5).map((a) => `<div class="note ${a.n} ${a.go || a.proy ? "click" : ""}" ${a.go ? `data-go="${a.go}"` : ""} ${a.proy ? `data-proy="${a.proy}"` : ""} ${a.unir ? `data-unir="${a.unir}"` : ""} style="cursor:${a.go || a.proy ? "pointer" : "default"}"><span class="ico">${ICO[a.n]}</span><span>${esc(a.t)}</span></div>`).join("")
     : `<div class="note good"><span class="ico">✓</span><span>Todo en orden.</span></div>`;
 
   renderFuturosInicio();
@@ -1479,6 +1484,7 @@ function renderInicio() {
 /* --- Mes --- */
 function renderMes() {
   if (ui.mes === hoy().slice(0, 7) && sincronizarFuturosMes()) save();
+  setTimeout(renderRepetidos, 0);
   const r = resumenMes(ui.mes);
   renderReparto(r); renderMeters(r); renderPendientes(); renderMovs(); renderHist(); renderRitmo(); renderPlanAhorro(); renderCategorias();
   const sobra = r2(r.saldoMes - r.pendienteTotal), cart = calcCartera();
@@ -2183,7 +2189,7 @@ document.addEventListener("click", (e) => {
   if (d.pend) {
     const inp = document.querySelector(`[data-amt="${d.pend}"]`), v = inp ? parseImporte(inp.value) : null;
     const p = S.meses[ui.mes].pendientes.find((x) => x.id === d.pend);
-    return marcarPendiente(ui.mes, d.pend, v != null && !isNaN(v) ? r2(v) : p.importe);
+    return marcarPendienteListo(ui.mes, d.pend, v != null && !isNaN(v) ? r2(v) : p.importe);
   }
   if (d.del) return borrarMovimiento(d.del);
   if (d.delfijo) { S.config.fijos = S.config.fijos.filter((f) => f.id !== d.delfijo); save(); return render(); }
@@ -2827,11 +2833,12 @@ function aplicarImportacion() {
     const mv = { id: uid(), fecha: x.fecha, concepto: x.concepto, importe: x.importe, tipo: x.tipo, cat: x.tipo === "gasto" ? categoria(x.categoria).g : x.tipo === "ingreso" ? "personal" : x.tipo, importado: true };
     if (x.tipo === "gasto") mv.categoria = x.categoria;
     if (x.activoId && (x.tipo === "ahorro" || x.tipo === "inversion" || x.tipo === "retirada")) mv.activoId = x.activoId;
-    // ¿coincide con un pago pendiente del mes? (mismo importe ±5 % y alguna palabra en común)
+    // ¿es un pago del mes? (aunque el importe real sea distinto del previsto, o ya lo marcaras a mano)
     const info = S.meses[m];
     if (info && (x.tipo === "gasto" || x.tipo === "ahorro" || x.tipo === "inversion")) {
-      const p = info.pendientes.find((p) => !p.hecho && p.tipo === x.tipo && Math.abs(p.importe - x.importe) <= Math.max(1, p.importe * 0.05) && (norm(p.concepto).split(" ").some((w) => w.length >= 4 && norm(x.concepto).includes(" " + w)) || (x.tipo === "gasto" && clasificar(p.concepto) === x.categoria) || x.tipo !== "gasto"));
-      if (p) { p.hecho = true; p.movId = mv.id; p.importe = x.importe; mv.pendiente = p.id; if (p.activoId) mv.activoId = p.activoId; if (x.tipo === "gasto" || p.cat === "futuro") mv.cat = p.cat; enlazados++; }
+      const best = (info.pendientes || []).filter((p) => !p.hecho || (p.movId && !(S.movimientos.find((y) => y.id === p.movId) || { importado: true }).importado))
+        .map((p) => ({ p, d: parecidoPago(p, mv) })).filter((z) => z.d != null).sort((a, b) => (a.p.hecho ? 1 : 0) - (b.p.hecho ? 1 : 0) || a.d - b.d)[0];
+      if (best) { enlazarPago(m, best.p, mv); enlazados++; }
     }
     S.movimientos.push(mv); n++;
   }
@@ -2855,6 +2862,7 @@ function revisarDatos() {
   for (const f of S.config.fijos) if (!(f.importe > 0)) out.push({ n: "info", t: "El gasto fijo “" + f.nombre + "” no tiene importe.", go: "cfg" });
   for (const p of S.proyectos.filter((p) => p.estado === "activo" && p.tipo === "meta" && !p.fecha)) out.push({ n: "info", t: "Pon fecha límite a “" + p.nombre + "” para saber cuánto apartar al mes.", proy: p.id });
   const mHoy = hoy().slice(0, 7);
+  for (const r of pagosRepetidos()) out.push({ n: "warn", t: "Pago repetido: “" + r.p.concepto + "” (" + eur(r.mio.importe) + ", a mano) y “" + r.banco.concepto + "” (" + eur(r.banco.importe) + ", del banco) son el mismo. Toca para dejar solo el del banco.", unir: r.m + "|" + r.p.id + "|" + r.banco.id });
   for (let i = 1; i <= 3; i++) { const m = addMes(mHoy, -i), info = S.meses[m]; if (info && info.base && !info.cerrado) { out.push({ n: "info", t: "Te falta cerrar " + mesLabel(m) + ".", go: "mes", mes: m }); break; } }
   const errDias = S.trabajo.dias.filter((d) => d.fecha >= addMes(mHoy, -2) && estadoDia(d)).length;
   if (errDias) out.push({ n: "warn", t: errDias + " jornada(s) recientes con datos a revisar.", go: "trabajo" });
@@ -2864,7 +2872,7 @@ function revisarDatos() {
 function renderRevision() {
   const el = $("#revision"); if (!el) return;
   const r = revisarDatos();
-  el.innerHTML = r.length ? r.map((a) => `<div class="note ${a.n}" ${a.go ? `data-go="${a.go}"` : ""} ${a.proy ? `data-proy="${a.proy}"` : ""} style="cursor:pointer"><span class="ico">${ICO[a.n]}</span><span>${esc(a.t)}</span></div>`).join("")
+  el.innerHTML = r.length ? r.map((a) => `<div class="note ${a.n}" ${a.go ? `data-go="${a.go}"` : ""} ${a.proy ? `data-proy="${a.proy}"` : ""} ${a.unir ? `data-unir="${a.unir}"` : ""} style="cursor:pointer"><span class="ico">${ICO[a.n]}</span><span>${esc(a.t)}</span></div>`).join("")
     : `<div class="note good"><span class="ico">✓</span><span>Tus datos están en orden.</span></div>`;
 }
 
@@ -3384,6 +3392,86 @@ document.addEventListener("click", (e) => {
   }
   aplicarCambioReparto(); save(); render();
 });
+
+/* ---------- 15e. PAGOS DEL MES ↔ MOVIMIENTOS DEL BANCO ----------
+   Un pago previsto ("Luz (estimada)" 100 €) y el cargo real del banco ("Fac. Luz niba" 65,78 €)
+   son el mismo pago: se enlazan en vez de apuntarse dos veces. */
+const PALABRAS_VACIAS = new Set(["pago", "pagos", "con", "tarjeta", "del", "las", "los", "para", "por", "recibo", "adeudo", "compra", "transferencia", "cargo", "estimada", "estimado", "www", "com", "bill", "mes", "fac", "factura", "cuota", "una", "uno", "sus"]);
+const palabras = (t) => norm(t).split(/[^a-z0-9ñ]+/).filter((w) => w.length >= 3 && !PALABRAS_VACIAS.has(w) && !/^\d+$/.test(w));
+function parecidoPago(p, x) {
+  if (p.tipo !== x.tipo) return null;
+  const dif = p.importe ? Math.abs(x.importe - p.importe) / p.importe : 1;
+  if (p.activoId && x.activoId && p.activoId === x.activoId && dif <= 0.5) return dif;
+  if (dif <= 0.03) return dif;
+  const wp = palabras(p.concepto), wx = palabras(x.concepto);
+  const palabra = wp.some((w) => wx.some((v) => v === w || (w.length >= 5 && v.startsWith(w.slice(0, 5))) || (v.length >= 5 && w.startsWith(v.slice(0, 5)))));
+  if (palabra && dif <= 0.6) return dif + 0.01;
+  if (x.tipo === "gasto" && dif <= 0.25) { const cp = clasificar(p.concepto); if (cp && cp !== "otros" && cp === (x.categoria || clasificar(x.concepto))) return dif + 0.02; }
+  return null;
+}
+const pendienteDe = (m, movId) => ((S.meses[m] || {}).pendientes || []).find((p) => p.movId === movId);
+/* Movimientos del banco de ese mes, sin enlazar, que se parecen al pago */
+function candidatosBanco(m, p) {
+  return movsMes(m).filter((x) => !x.pendiente && !pendienteDe(m, x.id) && x.tipo !== "nomina")
+    .map((x) => ({ x, d: parecidoPago(p, x) })).filter((c) => c.d != null)
+    .sort((a, b) => (b.x.importado ? 1 : 0) - (a.x.importado ? 1 : 0) || a.d - b.d).map((c) => c.x);
+}
+function enlazarPago(m, p, x) {
+  const viejo = p.hecho && p.movId && p.movId !== x.id ? S.movimientos.find((y) => y.id === p.movId) : null;
+  if (viejo && !viejo.importado) S.movimientos = S.movimientos.filter((y) => y.id !== viejo.id);
+  p.hecho = true; p.movId = x.id; p.importe = x.importe; x.pendiente = p.id;
+  if (p.activoId && !x.activoId) x.activoId = p.activoId;
+  if (x.tipo === "gasto") x.cat = p.cat; else if (p.cat === "futuro") x.cat = "futuro";
+}
+/* Pagos marcados a mano que además han llegado del banco (repetidos) */
+function pagosRepetidos(meses = 3) {
+  const out = [], mHoy = hoy().slice(0, 7);
+  for (let i = 0; i < meses; i++) {
+    const m = addMes(mHoy, -i), info = S.meses[m]; if (!info) continue;
+    for (const p of info.pendientes || []) {
+      if (!p.hecho || !p.movId) continue;
+      const mio = S.movimientos.find((y) => y.id === p.movId); if (!mio || mio.importado) continue;
+      const c = candidatosBanco(m, { ...p, importe: p.importe }).find((x) => x.importado);
+      if (c) out.push({ m, p, mio, banco: c });
+    }
+  }
+  return out;
+}
+function unirRepetido(m, pid, bancoId) {
+  const p = ((S.meses[m] || {}).pendientes || []).find((y) => y.id === pid), x = S.movimientos.find((y) => y.id === bancoId);
+  if (!p || !x) return;
+  enlazarPago(m, p, x); save(); render(); toast("Unido: queda solo el del banco (" + eur(x.importe) + ")");
+}
+function unirTodos() {
+  const L = pagosRepetidos(6); L.forEach((r) => enlazarPago(r.m, r.p, r.banco)); save(); render();
+  toast(L.length + (L.length === 1 ? " pago unido" : " pagos unidos"));
+}
+/* Al marcar un pago: si ya está en los movimientos del banco, se usa ese */
+function marcarPendienteListo(m, id, importe) {
+  const info = S.meses[m], p = info && info.pendientes.find((x) => x.id === id);
+  if (!p || p.hecho) return marcarPendiente(m, id, importe);
+  const c = candidatosBanco(m, { ...p, importe: importe || p.importe });
+  if (!c.length) return marcarPendiente(m, id, importe);
+  abrirHoja(`<h2>${esc(p.concepto)}</h2>
+    <div class="sub" style="margin-bottom:14px">Este pago parece estar ya en tus movimientos. ¿Es alguno de estos?</div>
+    <ul class="rows">${c.slice(0, 3).map((x) => `<li class="rowi click" data-usar="${x.id}"><div class="t"><b>${esc(x.concepto)}</b><span>${fechaCorta(x.fecha)}${x.importado ? " · del banco" : ""}</span></div><span class="a">${eur(x.importe)}</span></li>`).join("")}</ul>
+    <button class="btn gold full" data-usar="${c[0].id}" style="margin-top:14px">Sí, es ${c.length > 1 ? "el primero" : "ese"}</button>
+    <button class="btn full" id="pNuevo" style="margin-top:10px">No, apuntar uno nuevo de ${eur(importe || p.importe)}</button>`, () => {
+    $$("[data-usar]").forEach((b) => b.onclick = () => { enlazarPago(m, p, S.movimientos.find((y) => y.id === b.dataset.usar)); save(); cerrarHoja(); render(); toast("Marcado con el movimiento del banco"); });
+    $("#pNuevo").onclick = () => { cerrarHoja(); marcarPendiente(m, id, importe); };
+  });
+}
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("[data-unir]"); if (!t) return;
+  e.stopPropagation();
+  const [m, pid, bid] = t.dataset.unir.split("|"); unirRepetido(m, pid, bid);
+}, true);
+function renderRepetidos() {
+  const el = $("#repetidos"); if (!el) return;
+  const L = pagosRepetidos(6).filter((r) => r.m === ui.mes);
+  el.innerHTML = L.length ? `<div class="note warn" style="margin:6px 0 10px"><span class="ico">!</span><span>${L.length === 1 ? "Un pago está apuntado dos veces" : L.length + " pagos están apuntados dos veces"} (a mano y del banco): ${L.map((r) => esc(r.p.concepto) + " ↔ " + esc(r.banco.concepto)).join(", ")}. <button class="link" id="unirTodos">Dejar solo los del banco</button></span></div>` : "";
+  const b = $("#unirTodos"); if (b) b.onclick = unirTodos;
+}
 
 /* ---------- 16. TOOLTIP ---------- */
 const tip = $("#tip");
