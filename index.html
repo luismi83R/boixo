@@ -259,7 +259,7 @@ details > summary::-webkit-details-marker{display:none}
 .saldo-n:focus-visible{outline:2px solid var(--brass);outline-offset:4px;border-radius:6px}
 .tabla tr.hit td{color:var(--brass)}
 .tabla.fut td:nth-child(3),.tabla.fut th:nth-child(3){text-align:left;white-space:normal;min-width:150px}.tabla.fut td{vertical-align:top;white-space:nowrap}
-@media (min-width:960px){ .mes-acc{display:none!important} }
+
 .cfg-t{width:100%;border-collapse:collapse}
 #catsCfg .cfg-t tr td{border-bottom:0;padding-bottom:3px}
 #catsCfg .cfg-t tr td[colspan="3"]{padding-bottom:12px!important;border-bottom:1px solid var(--line)!important}
@@ -2804,7 +2804,7 @@ function hojaImportar() {
     <div class="sub" style="margin-bottom:12px">Descarga los movimientos de tu banco en Excel (.xlsx) o CSV y elígelo aquí. En la app del BBVA: Cuenta → Movimientos → Descargar.</div>
     <div class="row"><div><label>Importar desde</label><input type="date" id="iDesde" value="${desde}"></div><div style="display:flex;align-items:flex-end"><button class="btn gold full" id="iElegir">Elegir archivo</button></div></div>
     <input type="file" id="iFile" accept=".xlsx,.csv,.txt,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden">
-    <div class="muted">No importes movimientos de antes de tu saldo de partida: ya están dentro de él y se contarían dos veces.</div>
+    <div class="muted">Los movimientos que ya tengas salen marcados como “ya existe” y no se repiten. Los de antes de tu saldo de partida cuentan en el gasto de su mes, pero no cambian el saldo de la cuenta.</div>
     <div id="iRes" style="margin-top:14px"></div>`, () => {
     $("#iElegir").onclick = () => $("#iFile").click();
     $("#iFile").onchange = async (e) => {
