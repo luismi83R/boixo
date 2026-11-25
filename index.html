@@ -254,6 +254,9 @@ details > summary::-webkit-details-marker{display:none}
 .rp-dest{grid-template-columns:minmax(0,1fr) 150px 108px}
 @media (max-width:600px){.rp-row{grid-template-columns:minmax(0,1fr) 92px 96px;gap:8px}
  .rp-dest{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.rp-dest .rp-t{grid-column:1/-1;flex-direction:row}.rp-dest .rp-t select:first-child{flex:1;min-width:0}}
+.saldo-mes{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:16px 18px;margin:-6px 0 18px;border:1px solid var(--line-2);border-radius:16px;background:linear-gradient(135deg,rgba(57,135,229,.10),rgba(57,135,229,0) 70%)}
+.saldo-n{all:unset;cursor:pointer;display:flex;flex-direction:column;gap:3px;min-width:0}.saldo-n .lbl{font-size:13px;color:var(--text-2)}.saldo-n b.num{font-family:var(--serif);font-weight:400;font-size:30px;line-height:1.1;color:var(--text)}.saldo-n .muted{font-size:12.5px}
+.saldo-n:focus-visible{outline:2px solid var(--brass);outline-offset:4px;border-radius:6px}
 .tabla tr.hit td{color:var(--brass)}
 .tabla.fut td:nth-child(3),.tabla.fut th:nth-child(3){text-align:left;white-space:normal;min-width:150px}.tabla.fut td{vertical-align:top;white-space:nowrap}
 @media (min-width:960px){ .mes-acc{display:none!important} }
@@ -401,6 +404,7 @@ body.privado .hero-num,body.privado .hero-sub b,body.privado .stat .v,body.priva
   <!-- ================= MES ================= -->
   <section id="v-mes" class="view hidden">
     <div class="monthbar wide"><span class="ml mesLbl"></span><div class="nav"><button data-mes="-1" aria-label="Mes anterior">‹</button><button data-mes="1" aria-label="Mes siguiente">›</button></div></div>
+    <div id="saldoMes" class="wide"></div>
     <div class="btns wide mes-acc" style="margin:-8px 0 22px"><button class="btn sm gold" data-mgasto="1">Añadir gasto</button><button class="btn sm" id="addMov2">Otro movimiento</button><button class="btn sm" id="btnImportar">Importar del banco</button></div>
     <section class="block">
       <div class="panel">
@@ -841,8 +845,8 @@ function calcularReparto(base, c = S.config, fut = 0) {
   return { base, necesidades: nec, personal, ahorro: r2(A - inversion), inversion, ahorroTotal: A, items, futuro, futuroFalta: r2(Math.max(0, fut - futuro)), futuroOrigen: origen,
     necFijos, necLibre: r2(nec - necFijos - (origen === "necesidades" ? futuro : 0)) };
 }
-const SIGNO = { nomina: 1, ingreso: 1, gasto: -1, ahorro: -1, inversion: -1, retirada: 1, traspaso: 0, uso: 1 };
-const TIPO_TXT = { nomina: "Nómina", ingreso: "Ingreso", gasto: "Gasto", ahorro: "A ahorro", inversion: "Inversión", retirada: "Sacado de ahorro", traspaso: "Traspaso", uso: "Usado de lo apartado" };
+const SIGNO = { nomina: 1, ingreso: 1, gasto: -1, ahorro: -1, inversion: -1, retirada: 1, traspaso: 0, uso: 1, ajustep: 1, ajusten: -1 };
+const TIPO_TXT = { nomina: "Nómina", ingreso: "Ingreso", gasto: "Gasto", ahorro: "A ahorro", inversion: "Inversión", retirada: "Sacado de ahorro", traspaso: "Traspaso", uso: "Usado de lo apartado", ajustep: "Ajuste con el banco", ajusten: "Ajuste con el banco" };
 const movsMes = (m) => S.movimientos.filter((x) => x.fecha.slice(0, 7) === m);
 
 function resumenMes(m) {
@@ -870,7 +874,15 @@ function resumenMes(m) {
     ahorroNeto: r2(ahorro + inversion - retiradas), deudas, ratioDeuda: base ? deudas / base : 0, presupuestoPersonal: r2(rep.personal + otrosIngresos), necUsado: r2(gastoNec + (rep.futuroOrigen === "necesidades" ? apartadoFut : 0)), perUsado: r2(gastoPer + (rep.futuroOrigen === "personal" ? apartadoFut : 0)),
     pendientes, pendienteTotal, cerrado: !!info.cerrado, nMovs: mv.length };
 }
-const saldoCuenta = () => r2(S.movimientos.reduce((a, x) => a + SIGNO[x.tipo] * x.importe, S.config.saldoInicial));
+/* Lo que ya estaba en el banco cuando pusiste el saldo de partida no se vuelve a contar */
+function cuentaEnSaldo(x) {
+  const f = S.config.fechaSaldo;
+  if (!f) return true;
+  if (x.fecha > f) return true;
+  if (x.fecha < f) return false;
+  return !(S.config.saldoIds || []).includes(x.id);
+}
+const saldoCuenta = (hasta) => r2(S.movimientos.filter((x) => cuentaEnSaldo(x) && (!hasta || x.fecha <= hasta)).reduce((a, x) => a + (SIGNO[x.tipo] || 0) * x.importe, S.config.saldoInicial));
 
 function rehacerMes(m) {
   const base = r2(movsMes(m).filter((x) => x.tipo === "nomina").reduce((a, x) => a + x.importe, 0));
@@ -1486,7 +1498,7 @@ function renderMes() {
   if (ui.mes === hoy().slice(0, 7) && sincronizarFuturosMes()) save();
   setTimeout(renderRepetidos, 0);
   const r = resumenMes(ui.mes);
-  renderReparto(r); renderMeters(r); renderPendientes(); renderMovs(); renderHist(); renderRitmo(); renderPlanAhorro(); renderCategorias();
+  renderSaldoMes(); renderReparto(r); renderMeters(r); renderPendientes(); renderMovs(); renderHist(); renderRitmo(); renderPlanAhorro(); renderCategorias();
   const sobra = r2(r.saldoMes - r.pendienteTotal), cart = calcCartera();
   $("#cierreInfo").innerHTML = !r.base ? "Registra la nómina para poder cerrar el mes." : r.cerrado ? "Este mes ya está cerrado."
     : sobra >= 0 ? `Si cierras ahora te sobran <b class="num">${eur(sobra)}</b>, que irán ${cart.liquidez < S.config.fondoObjetivo ? "al fondo de emergencia" : "a la inversión que más lo necesite"}.`
@@ -1844,12 +1856,12 @@ function hojaDesglose(k) {
   let h = "", tit = "";
   if (k === "cuenta") {
     tit = "Cuenta corriente";
-    const sum = (f) => r2(S.movimientos.filter(f).reduce((s, x) => s + x.importe, 0));
-    const nom = sum((x) => x.tipo === "nomina"), ing = sum((x) => x.tipo === "ingreso"), gas = sum((x) => x.tipo === "gasto"), aho = sum((x) => x.tipo === "ahorro" || x.tipo === "inversion"), ret = sum((x) => x.tipo === "retirada");
-    h = `<ul class="rows">${fila("Saldo de partida", eur(S.config.saldoInicial), "El que pusiste en Ajustes")}${fila("+ Nóminas", eur(nom), S.movimientos.filter((x) => x.tipo === "nomina").length + " apuntadas")}${fila("+ Otros ingresos", eur(ing))}${fila("− Gastos", eur(gas))}${fila("− A ahorro e inversión", eur(aho))}${fila("+ Sacado de ahorro", eur(ret))}${fila("<span style='font-family:var(--serif);font-size:18px'>= Cuenta corriente</span>", "<b>" + eur(saldoCuenta()) + "</b>")}</ul>
+    const sum = (f) => r2(S.movimientos.filter((x) => cuentaEnSaldo(x) && f(x)).reduce((s, x) => s + x.importe, 0));
+    const nom = sum((x) => x.tipo === "nomina"), ing = sum((x) => x.tipo === "ingreso"), gas = sum((x) => x.tipo === "gasto"), aho = sum((x) => x.tipo === "ahorro" || x.tipo === "inversion"), ret = sum((x) => x.tipo === "retirada" || x.tipo === "uso"), aj = r2(sum((x) => x.tipo === "ajustep") - sum((x) => x.tipo === "ajusten"));
+    h = `<ul class="rows">${fila("Saldo de partida", eur(S.config.saldoInicial), S.config.fechaSaldo ? "Tu banco el " + fechaCorta(S.config.fechaSaldo) + " " + S.config.fechaSaldo.slice(0, 4) : "El que pusiste en Ajustes")}${fila("+ Nóminas", eur(nom), S.movimientos.filter((x) => cuentaEnSaldo(x) && x.tipo === "nomina").length + " desde esa fecha")}${fila("+ Otros ingresos", eur(ing))}${fila("− Gastos", eur(gas))}${fila("− A ahorro e inversión", eur(aho))}${fila("+ Sacado de ahorro", eur(ret))}${aj ? fila("± Ajustes con el banco", eur(aj)) : ""}${fila("<span style='font-family:var(--serif);font-size:18px'>= Cuenta corriente</span>", "<b>" + eur(saldoCuenta()) + "</b>")}</ul>
       <div class="muted" style="margin:10px 0 14px">Si no coincide con tu banco, revisa los movimientos o cambia el saldo de partida en Ajustes.</div>
       <h3 style="margin-bottom:6px">Últimos movimientos</h3><ul class="rows">${[...S.movimientos].sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, 8).map((x) => fila(esc(x.concepto), (SIGNO[x.tipo] > 0 ? "+" : SIGNO[x.tipo] < 0 ? "−" : "") + eur(x.importe), fechaCorta(x.fecha) + " · " + TIPO_TXT[x.tipo])).join("") || "<li class='sub'>Sin movimientos.</li>"}</ul>
-      <div class="btns" style="margin-top:14px"><button class="btn sm" data-go="mes" data-cerrar="1">Ver movimientos</button><button class="btn sm" data-go="cfg" data-cerrar="1">Cambiar saldo de partida</button></div>`;
+      <div class="btns" style="margin-top:14px"><button class="btn sm gold" data-cuadrar="1">Cuadrar con el banco</button><button class="btn sm" data-go="mes" data-cerrar="1">Ver movimientos</button></div>`;
   } else if (k === "fondo") {
     tit = "Fondo de emergencia";
     h = `<ul class="rows">${c.items.filter((x) => x.a.clase === "Liquidez").map((x) => fila(esc(x.a.nombre), eur(x.valor), x.last ? "Valor del " + fechaCorta(x.last.fecha) : "Por lo aportado")).join("")}${fila("Objetivo", eur(S.config.fondoObjetivo))}</ul><div class="muted" style="margin-top:10px">Cuenta las inversiones de tipo “Liquidez”. Actualiza su valor en Patrimonio.</div>`;
@@ -2163,10 +2175,11 @@ $("#quick").addEventListener("submit", (e) => {
 });
 
 document.addEventListener("click", (e) => {
-  const t = e.target.closest("[data-cat],[data-editmov],[data-caldia],[data-catdel],#btnPriv,#btnImportar,#addCat,[data-desglose],[data-deuda],[data-bien],[data-tj],[data-mgasto],#heroNum,[data-go],[data-q],[data-mes],[data-pend],[data-del],[data-delfijo],[data-deldia],[data-editdia],[data-valok],[data-delact],[data-undoval],[data-op],[data-delop],[data-precio],[data-proy],[data-back],[data-apunte],[data-tarea],[data-deltarea],[data-delapunte],[data-estado],[data-editproy],[data-delproy],[data-chip],#iNuevoProy,[data-fut],[data-futpagar],[data-futorig],#nuevoFut,#iNuevoFut,#futApartar,#futDevolver");
+  const t = e.target.closest("[data-cat],[data-editmov],[data-caldia],[data-catdel],#btnPriv,#btnImportar,#addCat,[data-desglose],[data-deuda],[data-bien],[data-tj],[data-mgasto],#heroNum,[data-go],[data-q],[data-mes],[data-pend],[data-del],[data-delfijo],[data-deldia],[data-editdia],[data-valok],[data-delact],[data-undoval],[data-op],[data-delop],[data-precio],[data-proy],[data-back],[data-apunte],[data-tarea],[data-deltarea],[data-delapunte],[data-estado],[data-editproy],[data-delproy],[data-chip],#iNuevoProy,[data-fut],[data-futpagar],[data-futorig],#nuevoFut,#iNuevoFut,#futApartar,#futDevolver,[data-cuadrar]");
   if (!t) return;
   const d = t.dataset;
   if (t.id === "iNuevoProy") return hojaProyecto(null);
+  if (d.cuadrar) return hojaCuadrar();
   if (t.id === "nuevoFut" || t.id === "iNuevoFut") return hojaFuturo(null);
   if (t.id === "futApartar") return hojaApartar();
   if (t.id === "futDevolver") return devolverSobrante();
@@ -2249,7 +2262,7 @@ document.addEventListener("click", (e) => { if (e.target.id === "tAdd") { const 
 
 document.addEventListener("change", (e) => {
   const t = e.target, d = t.dataset;
-  if (d.cfg) { let v = parseImporte(t.value); if (isNaN(v)) return toast("Número no válido"); if (t.hasAttribute("data-pct")) v /= 100; S.config[d.cfg] = v; if (d.cfg === "saldoInicial") S.config.fechaSaldo = hoy(); save(); return render(); }
+  if (d.cfg) { let v = parseImporte(t.value); if (isNaN(v)) return toast("Número no válido"); if (t.hasAttribute("data-pct")) v /= 100; S.config[d.cfg] = v; if (d.cfg === "saldoInicial") fijarSaldo(v); save(); return render(); }
   if (d.catcfg) {
     if (!S.config.categorias) S.config.categorias = JSON.parse(JSON.stringify(CATEGORIAS_BASE));
     const c = S.config.categorias.find((x) => x.id === d.catcfg); if (!c) return;
@@ -3471,6 +3484,76 @@ function renderRepetidos() {
   const L = pagosRepetidos(6).filter((r) => r.m === ui.mes);
   el.innerHTML = L.length ? `<div class="note warn" style="margin:6px 0 10px"><span class="ico">!</span><span>${L.length === 1 ? "Un pago está apuntado dos veces" : L.length + " pagos están apuntados dos veces"} (a mano y del banco): ${L.map((r) => esc(r.p.concepto) + " ↔ " + esc(r.banco.concepto)).join(", ")}. <button class="link" id="unirTodos">Dejar solo los del banco</button></span></div>` : "";
   const b = $("#unirTodos"); if (b) b.onclick = unirTodos;
+}
+
+/* ---------- 15f. SALDO DE LA CUENTA: cuadrar con el banco ---------- */
+function fijarSaldo(v) {
+  S.config.saldoInicial = r2(v); S.config.fechaSaldo = hoy();
+  S.config.saldoIds = S.movimientos.filter((x) => x.fecha === hoy()).map((x) => x.id);   // ya incluidos en lo que dice el banco hoy
+}
+function diagnosticoCuenta() {
+  const hoyF = hoy(), f = S.config.fechaSaldo;
+  const efecto = (L) => r2(L.reduce((s, x) => s + (SIGNO[x.tipo] || 0) * x.importe, 0));
+  const cuentan = S.movimientos.filter(cuentaEnSaldo);
+  const antiguos = f ? S.movimientos.filter((x) => !cuentaEnSaldo(x) && (SIGNO[x.tipo] || 0) !== 0) : [];
+  const futuros = cuentan.filter((x) => x.fecha > hoyF && (SIGNO[x.tipo] || 0) !== 0);
+  // repetidos exactos: mismo tipo e importe con 4 días o menos de diferencia
+  const rep = [], vistos = new Set();
+  const ord = [...cuentan].filter((x) => (SIGNO[x.tipo] || 0) !== 0).sort((a, b) => a.fecha.localeCompare(b.fecha));
+  for (let i = 0; i < ord.length; i++) for (let j = i + 1; j < ord.length; j++) {
+    const a = ord[i], b = ord[j];
+    if ((fechaDate(b.fecha) - fechaDate(a.fecha)) / 864e5 > 4) break;
+    if (a.tipo === b.tipo && Math.abs(a.importe - b.importe) < 0.01 && !vistos.has(b.id) && !vistos.has(a.id) && !(a.importado && b.importado && norm(a.concepto) !== norm(b.concepto))) { rep.push([a, b]); vistos.add(b.id); }
+  }
+  for (const r of pagosRepetidos(6)) if (cuentaEnSaldo(r.mio) && !vistos.has(r.mio.id)) { rep.push([r.banco, r.mio]); vistos.add(r.mio.id); }
+  // apuntados a mano en días que ya cubre el extracto del banco
+  const ultImp = cuentan.filter((x) => x.importado).map((x) => x.fecha).sort().pop() || "";
+  const manuales = cuentan.filter((x) => !x.importado && !vistos.has(x.id) && ["gasto", "ahorro", "inversion", "retirada", "ingreso"].includes(x.tipo) && x.fecha <= hoyF && (!ultImp || x.fecha <= ultImp || x.tipo === "ahorro" || x.tipo === "inversion") && (ultImp || x.pendiente));
+  return { antiguos, futuros, rep, manuales, ultImp, efecto };
+}
+function hojaCuadrar() {
+  const app = saldoCuenta(), D = diagnosticoCuenta();
+  const filaM = (x, extra) => `<li class="rowi click" data-editmov="${x.id}"><div class="t"><b>${esc(x.concepto)}</b><span>${fechaCorta(x.fecha)} · ${TIPO_TXT[x.tipo]}${x.importado ? " · del banco" : " · a mano"}${extra || ""}</span></div><span class="a">${(SIGNO[x.tipo] || 0) > 0 ? "+" : "−"}${eur(x.importe)}</span></li>`;
+  const sec = (t, desc, html) => `<h3 style="margin:18px 0 4px">${t}</h3><div class="muted" style="margin-bottom:4px">${desc}</div><ul class="rows">${html}</ul>`;
+  let rev = "";
+  if (D.rep.length) rev += sec("Posibles repetidos", "El mismo pago apuntado dos veces. Toca el que sobre (normalmente el “a mano”) y bórralo.", D.rep.map(([a, b]) => filaM(b, " · igual que “" + esc(a.concepto) + "”")).join(""));
+  if (D.manuales.length) rev += sec("Apuntados a mano", "Pagos y transferencias que marcaste tú" + (D.ultImp ? " (tu último extracto llega al " + fechaCorta(D.ultImp) + ")" : "") + ". Comprueba en el banco que salieron de verdad; si no, tócalos y bórralos o desmárcalos.", D.manuales.slice(0, 30).map((x) => filaM(x)).join("") + `<li class="rowi"><div class="t"><b>Total</b></div><span class="a">${eur(D.efecto(D.manuales))}</span></li>`);
+  if (D.futuros.length) rev += sec("Con fecha futura", "Aún no han pasado, pero ya restan o suman.", D.futuros.map((x) => filaM(x)).join(""));
+  abrirHoja(`<h2>Cuadrar con el banco</h2>
+    <div class="stats">${stat("La app calcula", eur(app), "desde tu saldo del " + (S.config.fechaSaldo ? fechaCorta(S.config.fechaSaldo) : "principio"))}${stat("Diferencia", "—", "", "")}</div>
+    <div class="field" style="margin-top:12px"><label>¿Cuánto pone tu banco ahora mismo?</label><input id="qBanco" inputmode="decimal" placeholder="0,00"></div>
+    <div id="qRes" class="preview" style="margin-bottom:12px">Escribe el saldo que ves en la app del BBVA.</div>
+    ${D.antiguos.length ? `<div class="note info"><span class="ico">i</span><span>${D.antiguos.length} ${D.antiguos.length === 1 ? "movimiento es" : "movimientos son"} de antes de tu saldo de partida (${fechaCorta(S.config.fechaSaldo)}) y ya no ${D.antiguos.length === 1 ? "se cuenta" : "se cuentan"}: ese dinero ya estaba dentro del saldo.</span></div>` : ""}
+    ${rev ? `<div style="margin-top:6px">${rev}</div>` : `<div class="muted">No he encontrado repetidos ni pagos dudosos.</div>`}
+    <div style="margin-top:18px"><button class="btn gold full" id="qAjustar" disabled>Ajustar la diferencia</button>
+    <div class="muted" style="margin-top:8px">Revisa primero la lista: cuando borres lo que sobra, la diferencia se hará más pequeña. Lo que quede lo apunto como “Ajuste con el banco” y la cuenta queda igual que en tu banco.</div></div>`, () => {
+    const upd = () => {
+      const v = parseImporte($("#qBanco").value), ok = !isNaN(v) && $("#qBanco").value.trim() !== "";
+      const dif = ok ? r2(v - saldoCuenta()) : 0;
+      $$(".sheet .stat")[1].querySelector(".v").textContent = ok ? (dif > 0 ? "+" : dif < 0 ? "−" : "") + eur(Math.abs(dif)) : "—";
+      $("#qRes").innerHTML = !ok ? "Escribe el saldo que ves en la app del BBVA." : Math.abs(dif) < 0.01 ? "<b>Cuadra al céntimo.</b> No hay nada que ajustar." : dif < 0 ? `La app cree que tienes <b>${eur(-dif)} más</b> de lo que hay. Suele ser un pago repetido o una transferencia marcada que aún no has hecho.` : `En tu banco hay <b>${eur(dif)} más</b> de lo que calcula la app. Suele ser un ingreso sin apuntar o un pago marcado que aún no ha salido.`;
+      $("#qAjustar").disabled = !ok || Math.abs(dif) < 0.01;
+      $("#qAjustar").textContent = ok && Math.abs(dif) >= 0.01 ? "Ajustar " + (dif > 0 ? "+" : "−") + eur(Math.abs(dif)) : "Ajustar la diferencia";
+    };
+    $("#qBanco").addEventListener("input", upd);
+    if (S.config.ultimoCuadre) $("#qBanco").placeholder = "Último: " + eur(S.config.ultimoCuadre.saldo) + " el " + fechaCorta(S.config.ultimoCuadre.fecha);
+    $("#qAjustar").onclick = () => {
+      const v = parseImporte($("#qBanco").value), dif = r2(v - saldoCuenta());
+      if (isNaN(v) || Math.abs(dif) < 0.01) return;
+      S.movimientos.push({ id: uid(), fecha: hoy(), concepto: "Ajuste para cuadrar con el banco", importe: Math.abs(dif), tipo: dif > 0 ? "ajustep" : "ajusten", cat: "ajuste" });
+      S.config.ultimoCuadre = { fecha: hoy(), saldo: r2(v) };
+      save(); cerrarHoja(); render(); toast("Cuadrado: tu cuenta queda en " + eur(v));
+    };
+  });
+}
+function renderSaldoMes() {
+  const el = $("#saldoMes"); if (!el) return;
+  const s = saldoCuenta(), mHoy = hoy().slice(0, 7), r = resumenMes(mHoy), tras = r2(s - r.pendienteTotal);
+  const uc = S.config.ultimoCuadre;
+  el.innerHTML = `<div class="saldo-mes">
+    <button class="saldo-n" data-desglose="cuenta"><span class="lbl">En tu cuenta hoy</span><b class="num">${eur(s)}</b>
+      <span class="muted">${r.pendienteTotal > 0 ? "Tras los pagos pendientes de " + mesNombre(mHoy) + ": <b style='color:" + (tras < 0 ? "var(--crit)" : "var(--text)") + "'>" + eur(tras) + "</b>" : "Sin pagos pendientes este mes"}${uc ? " · Cuadrado con el banco el " + fechaCorta(uc.fecha) : ""}</span></button>
+    <button class="btn sm" data-cuadrar="1">Cuadrar con el banco</button></div>`;
 }
 
 /* ---------- 16. TOOLTIP ---------- */
